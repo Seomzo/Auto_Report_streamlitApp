@@ -85,29 +85,14 @@ def set_bg_color():
 # Function to connect to Google Sheets
 def connect_to_google_sheet(sheet_name, worksheet_name):
     try:
-        # Load JSON key file from the same directory
-        json_keyfile_path = os.path.join(os.path.dirname(__file__), 'auto-pop-report-b3525fd81b96.json')
-        if not os.path.exists(json_keyfile_path):
-            st.error(f"JSON key file not found at {json_keyfile_path}. Please ensure the file is in the correct location.")
-            return None
-        
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        
-        # Load credentials from JSON file
-        with open(json_keyfile_path) as json_file:
-            json_keyfile = json.load(json_file)
-        
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(json_keyfile, scope)
+        # Load JSON key file from secrets
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(
+            st.secrets["GOOGLE_CREDENTIALS"],
+            scopes=["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        )
         client = gspread.authorize(creds)
         sheet = client.open(sheet_name).worksheet(worksheet_name)  # Select worksheet by name
         return sheet
-
-    except FileNotFoundError as e:
-        st.error(f"File not found error: {e}. Please make sure the JSON key file exists and is accessible.")
-        return None
-    except json.JSONDecodeError as e:
-        st.error(f"JSON decode error: {e}. Please check the JSON key file for formatting issues.")
-        return None
     except gspread.exceptions.SpreadsheetNotFound:
         st.error(f"The Google Sheet named '{sheet_name}' was not found. Please verify the sheet name.")
         return None
@@ -125,7 +110,7 @@ def clean_column_data(column):
     """Clean column data by removing non-numeric characters and converting to float."""
     return column.replace('[\$,]', '', regex=True).astype(float)
 
-# Excel
+# Function to count and sum gross amounts from the Excel file
 def count_and_sum_gross_in_excel(excel_file_path, names_column):
     df = pd.read_excel(excel_file_path)
     df[names_column] = df[names_column].str.strip().str.upper()  # Normalize to uppercase and strip spaces
@@ -159,10 +144,11 @@ def update_google_sheet(sheet, name_counts, labor_gross_sums, parts_gross_sums, 
                 # Update A-La-Cart Count
                 sheet.update_cell(row_index, date_column_index, int(name_counts[advisor_name]))  # Convert to int
                 
+                # Update Labor Gross and Parts Gross
                 sheet.update_cell(row_index + 1, date_column_index, float(labor_gross_sums[advisor_name]))  # Convert to float
-                
                 sheet.update_cell(row_index + 2, date_column_index, float(parts_gross_sums[advisor_name]))  # Convert to float
                 
+                # Apply formatting
                 black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
                 format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
                 format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
