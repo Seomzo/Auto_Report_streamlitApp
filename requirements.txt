@@ -1,4 +1,4 @@
-pandas==3.11.3
+pandas
 gspread
 oauth2client
 fsspec==2024.6.1
