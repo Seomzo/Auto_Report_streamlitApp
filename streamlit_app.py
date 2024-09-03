@@ -83,10 +83,8 @@ def set_bg_color():
     )
 
 # Function to connect to Google Sheets
-# Function to connect to Google Sheets
 def connect_to_google_sheet(sheet_name, worksheet_name):
     try:
-        # Load JSON key file from secrets
         google_creds = st.secrets["GOOGLE_CREDENTIALS"]
         creds = ServiceAccountCredentials.from_json_keyfile_dict(
             dict(google_creds),
@@ -109,12 +107,11 @@ def connect_to_google_sheet(sheet_name, worksheet_name):
         st.error(f"An unexpected error occurred: {e}. Please check the configuration and try again.")
         return None
 
-
 def clean_column_data(column):
     """Clean column data by removing non-numeric characters and converting to float."""
     return column.replace('[\$,]', '', regex=True).astype(float)
 
-# Function to count and sum gross amounts from the Excel file
+# Excel processing function
 def count_and_sum_gross_in_excel(excel_file_path, names_column):
     df = pd.read_excel(excel_file_path)
     df[names_column] = df[names_column].str.strip().str.upper()  # Normalize to uppercase and strip spaces
@@ -148,11 +145,10 @@ def update_google_sheet(sheet, name_counts, labor_gross_sums, parts_gross_sums, 
                 # Update A-La-Cart Count
                 sheet.update_cell(row_index, date_column_index, int(name_counts[advisor_name]))  # Convert to int
                 
-                # Update Labor Gross and Parts Gross
                 sheet.update_cell(row_index + 1, date_column_index, float(labor_gross_sums[advisor_name]))  # Convert to float
+                
                 sheet.update_cell(row_index + 2, date_column_index, float(parts_gross_sums[advisor_name]))  # Convert to float
                 
-                # Apply formatting
                 black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
                 format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
                 format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
@@ -196,17 +192,22 @@ def main():
         unsafe_allow_html=True
     )
 
+    # Input for Google Sheet details
     sheet_name = st.text_input("Enter the Google Sheet name:", "August Advisor Performance-OMAR")
     worksheet_name = st.text_input("Enter the Worksheet (tab) name:", "A-La-Carte")
 
+    # Upload Excel file
     uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"])
     
-    selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d')
+    # Date input with default to today's date
+    selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d').lstrip('0')
     
     if uploaded_file is not None and sheet_name and worksheet_name:
+        # Load the Excel file and process
         df = pd.read_excel(uploaded_file)
         st.write("Excel data preview:", df.head())
         
+        # Process the Excel file and update Google Sheets
         sheet = connect_to_google_sheet(sheet_name, worksheet_name)
         if sheet is None:
             st.error("Failed to connect to the Google Sheet. Please check the inputs and try again.")
@@ -217,7 +218,7 @@ def main():
         st.write(f"Labor Gross Sums: {labor_gross_sums.to_dict()}")
         st.write(f"Parts Gross Sums: {parts_gross_sums.to_dict()}")
         
-        
+        # Update the Google Sheet
         if st.button("Update Google Sheet"):
             update_google_sheet(sheet, name_counts, labor_gross_sums, parts_gross_sums, selected_date)
             st.success("Google Sheet updated successfully.")
