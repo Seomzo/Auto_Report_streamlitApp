@@ -83,16 +83,19 @@ def set_bg_color():
     )
 
 # Function to connect to Google Sheets
+# Function to connect to Google Sheets
 def connect_to_google_sheet(sheet_name, worksheet_name):
     try:
         # Load JSON key file from secrets
+        google_creds = st.secrets["GOOGLE_CREDENTIALS"]
         creds = ServiceAccountCredentials.from_json_keyfile_dict(
-            st.secrets["GOOGLE_CREDENTIALS"],
+            dict(google_creds),
             scopes=["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         )
         client = gspread.authorize(creds)
         sheet = client.open(sheet_name).worksheet(worksheet_name)  # Select worksheet by name
         return sheet
+
     except gspread.exceptions.SpreadsheetNotFound:
         st.error(f"The Google Sheet named '{sheet_name}' was not found. Please verify the sheet name.")
         return None
@@ -105,6 +108,7 @@ def connect_to_google_sheet(sheet_name, worksheet_name):
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}. Please check the configuration and try again.")
         return None
+
 
 def clean_column_data(column):
     """Clean column data by removing non-numeric characters and converting to float."""
