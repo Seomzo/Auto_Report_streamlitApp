@@ -100,6 +100,7 @@ def clean_column_data(column):
     """Clean column data by removing non-numeric characters and converting to float."""
     return column.replace('[\$,]', '', regex=True).astype(float)
 
+
 def process_menu_sales_data(df, names_column):
     df[names_column] = df[names_column].str.strip().str.upper()  # Normalize to uppercase and strip spaces
     
@@ -143,12 +144,18 @@ def process_commodities_data(df, names_column="Primary Advisor Name"):
     # Normalize the advisor names
     df[names_column] = df[names_column].str.strip().str.upper()  # Normalize to uppercase and strip spaces
     
+    # Check for the correct 'Gross' column
+    gross_column = 'Gross'  # Adjust this if the column name is different
+    if gross_column not in df.columns:
+        st.error(f"Column '{gross_column}' not found in the uploaded Commodities Excel. Please check the column names.")
+        return pd.Series(dtype='int'), pd.Series(dtype='float')  # Return empty Series if column not found
+
     # Clean data
-    df['Opcode Parts Gross'] = clean_column_data(df['Opcode Parts Gross'])
+    df[gross_column] = clean_column_data(df[gross_column])
     
     # Calculate counts and sums
     name_counts = df[names_column].value_counts()  # Regular name count
-    parts_gross_sums = df.groupby(names_column)['Opcode Parts Gross'].sum()
+    parts_gross_sums = df.groupby(names_column)[gross_column].sum()
     
     return name_counts, parts_gross_sums
 
