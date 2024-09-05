@@ -167,92 +167,35 @@ def process_recommendations_data(df, names_column="Name"):
 
 
 
-def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False, handle_four_outputs=False):
-    headers = sheet.row_values(2)
+def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False):
+    headers = sheet.row_values(2)  # Assuming the date is in row 2
     if date in headers:
         date_column_index = headers.index(date) + 1
     else:
         st.error(f"Date {date} not found in the sheet.")
         return
     
-    sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]
+    sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]  # Adjust if advisors are in a different column
     
     for advisor_name in name_counts.index:
         try:
             if advisor_name in sheet_advisor_names:
-                row_index = sheet_advisor_names.index(advisor_name) + start_row
+                row_index = sheet_advisor_names.index(advisor_name) + start_row  # Find the row for the advisor
                 
+                # Update Count
                 sheet.update_cell(row_index, date_column_index, int(name_counts[advisor_name]))
                 
                 if handle_two_outputs:
+                    # For Commodities: Only update Parts Gross
                     parts_gross = float(args[0].get(advisor_name, 0))
                     sheet.update_cell(row_index + 1, date_column_index, parts_gross)
+                    
+                    # Apply black text formatting to updated cells
                     black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
                     format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
                     format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
-                elif handle_four_outputs:
-                    rec_count = int(args[0].get(advisor_name, 0))
-                    rec_sold_count = int(args[1].get(advisor_name, 0))
-                    rec_amount = float(args[2].get(advisor_name, 0))
-                    rec_sold_amount = float(args[3].get(advisor_name, 0))
-                    
-                    sheet.update_cell(row_index, date_column_index, rec_count)
-                    sheet.update_cell(row_index + 1, date_column_index, rec_sold_count)
-                    sheet.update_cell(row_index + 2, date_column_index, rec_amount)
-                    sheet.update_cell(row_index + 3, date_column_index, rec_sold_amount)
-                    
-                    black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
-                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
-                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
-                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 2, date_column_index)}", black_format)
-                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 3, date_column_index)}", black_format)
-            else:
-                st.warning(f"{advisor_name} not found in the Google Sheet.")
-        except gspread.exceptions.APIError as e:
-            st.error(f"Error updating cell for {advisor_name}: {e}")
-        except Exception as e:
-            st.error(f"An error occurred: {e}")
-
-    headers = sheet.row_values(2)
-    if date in headers:
-        date_column_index = headers.index(date) + 1
-    else:
-        st.error(f"Date {date} not found in the sheet.")
-        return
-    
-    sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]
-    
-    for advisor_name in name_counts.index:
-        try:
-            if advisor_name in sheet_advisor_names:
-                row_index = sheet_advisor_names.index(advisor_name) + start_row
-                
-                sheet.update_cell(row_index, date_column_index, int(name_counts[advisor_name]))
-                
-                if handle_two_outputs:
-                    parts_gross = float(args[0].get(advisor_name, 0))
-                    sheet.update_cell(row_index + 1, date_column_index, parts_gross)
-                    black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
-                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
-                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
-                elif handle_four_outputs:
-                    rec_count = int(args[0].get(advisor_name, 0))
-                    rec_sold_count = int(args[1].get(advisor_name, 0))
-                    rec_amount = float(args[2].get(advisor_name, 0))
-                    rec_sold_amount = float(args[3].get(advisor_name, 0))
-                    
-                    sheet.update_cell(row_index, date_column_index, rec_count)
-                    sheet.update_cell(row_index + 1, date_column_index, rec_sold_count)
-                    sheet.update_cell(row_index + 2, date_column_index, rec_amount)
-                    sheet.update_cell(row_index + 3, date_column_index, rec_sold_amount)
-                    
-                    black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
-                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
-                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
-                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 2, date_column_index)}", black_format)
-                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 3, date_column_index)}", black_format)
-                else:
-            
+                elif len(args) == 3:
+                    # For Menu Sales and A-La-Carte: Update Labor and Parts Gross
                     labor_gross = float(args[0].get(advisor_name, 0))
                     parts_gross = float(args[1].get(advisor_name, 0))
                     
@@ -267,6 +210,31 @@ def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_o
                     format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
                     format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
                     format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 2, date_column_index)}", black_format)
+                elif len(args) == 4:
+                    # For Recommendations: Update all four outputs
+                    rec_count = float(args[0].get(advisor_name, 0))
+                    rec_sold_count = float(args[1].get(advisor_name, 0))
+                    rec_amount = float(args[2].get(advisor_name, 0))
+                    rec_sold_amount = float(args[3].get(advisor_name, 0))
+
+                    # Update Rec Count
+                    sheet.update_cell(row_index, date_column_index, rec_count)
+                    
+                    # Update Rec Sold Count
+                    sheet.update_cell(row_index + 1, date_column_index, rec_sold_count)
+                    
+                    # Update Rec Amount
+                    sheet.update_cell(row_index + 2, date_column_index, rec_amount)
+                    
+                    # Update Rec Sold Amount
+                    sheet.update_cell(row_index + 3, date_column_index, rec_sold_amount)
+
+                    # Apply black text formatting to updated cells
+                    black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 2, date_column_index)}", black_format)
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 3, date_column_index)}", black_format)
             else:
                 st.warning(f"{advisor_name} not found in the Google Sheet.")
         except gspread.exceptions.APIError as e:
@@ -380,8 +348,9 @@ def main():
         st.write(f"Recommendations Sold Amount: {rec_sold_amount.to_dict()}")
         
         if st.button("Update Recommendations in Google Sheet"):
-            update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=12, handle_two_outputs=False)
+            update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10)
             st.success("Recommendations data updated successfully.")
+
 
 if __name__ == "__main__":
     main()
