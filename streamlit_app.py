@@ -302,7 +302,7 @@ def main():
         st.write(f"Commodities Parts Gross Sums: {commodities_parts_gross_sums.to_dict()}")
         
         if st.button("Update Commodities in Google Sheet"):
-            update_commodities_in_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, selected_date, start_row=) 8 # Adjust start_row as per your sheet layout
+            update_commodities_in_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, selected_date, start_row=8)  # Adjust start_row as per your sheet layout
             st.success("Commodities data updated successfully.")
 
 if __name__ == "__main__":
