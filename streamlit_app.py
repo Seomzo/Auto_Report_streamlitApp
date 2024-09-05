@@ -139,6 +139,9 @@ def process_recommendations_data(df, names_column="Name"):
     # Ensure no leading/trailing spaces in column names
     df.columns = df.columns.str.strip()
     
+    # Filter out rows where the advisor name is "Total"
+    df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
+    
     # Check if the required column exists
     if names_column not in df.columns:
         st.error(f"Column '{names_column}' not found in the uploaded Recommendations Excel. Please check the column names.")
@@ -392,4 +395,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
