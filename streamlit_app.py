@@ -55,7 +55,7 @@ def process_menu_sales_data(df, names_column):
     return name_counts, labor_gross_sums, parts_gross_sums
 
 def update_google_sheet(sheet, name_counts, labor_gross_sums, parts_gross_sums, date):
-    headers = sheet.row_values(3)  # Get headers from the sheet assuming row 3 has the dates
+    headers = sheet.row_values(2)  # Get headers from the sheet assuming row 3 has the dates
     if date in headers:
         date_column_index = headers.index(date) + 1
     else:
