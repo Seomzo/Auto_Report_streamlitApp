@@ -17,62 +17,62 @@ def set_bg_color():
         /* Light mode styles */
         @media (prefers-color-scheme: light) {
             .stApp {
-                background-color: #f7f8fa;  /* Light background color */
-                color: #000;  /* Light mode text color */
+                background-color: #f7f8fa;
+                color: #000;
             }
             .rounded-square {
                 background-color: white;
-                border: 1px solid #ddd;  /* Light mode border color */
+                border: 1px solid #ddd;
                 border-radius: 12px;
                 padding: 20px;
                 margin-bottom: 20px;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);  /* Light shadow for depth */
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             }
             .copy-btn {
                 color: #fff;
-                background-color: #1f77b4;  /* Modern button color */
+                background-color: #1f77b4;
                 border: none;
                 padding: 8px 16px;
                 border-radius: 8px;
                 cursor: pointer;
                 font-size: 14px;
                 transition: background-color 0.3s ease;
-                width: auto;  /* Adjust to fit the content */
+                width: auto;
                 display: inline-block;
             }
             .copy-btn:hover {
-                background-color: #1a5a8a;  /* Darker shade on hover */
+                background-color: #1a5a8a;
             }
         }
 
         /* Dark mode styles */
         @media (prefers-color-scheme: dark) {
             .stApp {
-                background-color: #2c2c2c;  /* Dark background color */
-                color: #e0e0e0;  /* Dark mode text color */
+                background-color: #2c2c2c;
+                color: #e0e0e0;
             }
             .rounded-square {
                 background-color: #3a3a3a;
-                border: 1px solid #555;  /* Dark mode border color */
+                border: 1px solid #555;
                 border-radius: 12px;
                 padding: 20px;
                 margin-bottom: 20px;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);  /* Dark shadow for depth */
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
             }
             .copy-btn {
                 color: #000;
-                background-color: #90caf9;  /* Modern button color for dark mode */
+                background-color: #90caf9;
                 border: none;
                 padding: 8px 16px;
                 border-radius: 8px;
                 cursor: pointer;
                 font-size: 14px;
                 transition: background-color 0.3s ease;
-                width: auto;  /* Adjust to fit the content */
+                width: auto;
                 display: inline-block;
             }
             .copy-btn:hover {
-                background-color: #42a5f5;  /* Darker shade on hover */
+                background-color: #42a5f5;
             }
         }
         </style>
@@ -88,7 +88,7 @@ def connect_to_google_sheet(sheet_name, worksheet_name):
             scopes=["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         )
         client = gspread.authorize(creds)
-        sheet = client.open(sheet_name).worksheet(worksheet_name)  # Select worksheet by name
+        sheet = client.open(sheet_name).worksheet(worksheet_name)
         return sheet
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}. Please check the configuration and try again.")
@@ -99,92 +99,90 @@ def clean_column_data(column):
     return column.replace('[\$,]', '', regex=True).astype(float)
 
 def process_menu_sales_data(df, names_column):
-    df[names_column] = df[names_column].str.strip().str.upper()  # Normalize to uppercase and strip spaces
-    
-    # Clean data
+    df[names_column] = df[names_column].str.strip().str.upper()
     df['Opcode Labor Gross'] = clean_column_data(df['Opcode Labor Gross'])
     df['Opcode Parts Gross'] = clean_column_data(df['Opcode Parts Gross'])
-    
-    # Calculate counts and sums
-    name_counts = df[names_column].value_counts() / 2  # Adjust counts by dividing by 2 for duplicates
+    name_counts = df[names_column].value_counts() / 2
     labor_gross_sums = df.groupby(names_column)['Opcode Labor Gross'].sum()
     parts_gross_sums = df.groupby(names_column)['Opcode Parts Gross'].sum()
-    
     return name_counts, labor_gross_sums, parts_gross_sums
 
 def process_alacarte_data(df, names_column):
-    df[names_column] = df[names_column].str.strip().str.upper()  # Normalize to uppercase and strip spaces
-    
-    # Clean data
+    df[names_column] = df[names_column].str.strip().str.upper()
     df['Opcode Labor Gross'] = clean_column_data(df['Opcode Labor Gross'])
     df['Opcode Parts Gross'] = clean_column_data(df['Opcode Parts Gross'])
-    
-    # Calculate counts and sums
-    name_counts = df[names_column].value_counts()  # Regular name count
+    name_counts = df[names_column].value_counts()
     labor_gross_sums = df.groupby(names_column)['Opcode Labor Gross'].sum()
     parts_gross_sums = df.groupby(names_column)['Opcode Parts Gross'].sum()
-    
     return name_counts, labor_gross_sums, parts_gross_sums
 
 def process_commodities_data(df, names_column="Primary Advisor Name"):
-    # Display available columns for debugging
     st.write("Available columns in Commodities data:", df.columns.tolist())
-    
-    # Ensure no leading/trailing spaces in column names
     df.columns = df.columns.str.strip()
-    
-    # Check if the required column exists
     if names_column not in df.columns:
         st.error(f"Column '{names_column}' not found in the uploaded Commodities Excel. Please check the column names.")
-        return pd.Series(dtype='int'), pd.Series(dtype='float')  # Return empty Series if column not found
-
-    # Normalize the advisor names
-    df[names_column] = df[names_column].str.strip().str.upper()  # Normalize to uppercase and strip spaces
-    
-    # Check for the correct 'Gross' column
+        return pd.Series(dtype='int'), pd.Series(dtype='float')
+    df[names_column] = df[names_column].str.strip().str.upper()
     gross_column = 'Gross'
     if gross_column not in df.columns:
         st.error(f"Column '{gross_column}' not found in the uploaded Commodities Excel. Please check the column names.")
-        return pd.Series(dtype='int'), pd.Series(dtype='float')  # Return empty Series if column not found
-
-    # Clean data in the Gross column
+        return pd.Series(dtype='int'), pd.Series(dtype='float')
     df[gross_column] = clean_column_data(df[gross_column])
-    
-    # Calculate counts and sums
-    name_counts = df[names_column].value_counts()  # Regular name count
+    name_counts = df[names_column].value_counts()
     parts_gross_sums = df.groupby(names_column)[gross_column].sum()
-    
     return name_counts, parts_gross_sums
 
-def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False):
-    headers = sheet.row_values(2)  # Assuming date is in row 2
+def process_recommendations_data(df, names_column="Primary Advisor Name"):
+    st.write("Available columns in Recommendations data:", df.columns.tolist())
+    df.columns = df.columns.str.strip()
+    df[names_column] = df[names_column].str.strip().str.upper()
+    rec_count = df[names_column].value_counts()
+    rec_sold_count = df.groupby(names_column)['Recommendations Sold'].sum()
+    rec_amount = df.groupby(names_column)['Recommendations $ amount'].sum()
+    rec_sold_amount = df.groupby(names_column)['Recommendations sold $ amount'].sum()
+    return rec_count, rec_sold_count, rec_amount, rec_sold_amount
+
+def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False, handle_four_outputs=False):
+    headers = sheet.row_values(2)
     if date in headers:
         date_column_index = headers.index(date) + 1
     else:
         st.error(f"Date {date} not found in the sheet.")
         return
     
-    sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]  # Adjust if advisors are in a different column
+    sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]
     
     for advisor_name in name_counts.index:
         try:
             if advisor_name in sheet_advisor_names:
-                row_index = sheet_advisor_names.index(advisor_name) + start_row  # Find the row for the advisor
+                row_index = sheet_advisor_names.index(advisor_name) + start_row
                 
-                # Update Count
                 sheet.update_cell(row_index, date_column_index, int(name_counts[advisor_name]))
                 
                 if handle_two_outputs:
-                    # For Commodities: Only update Parts Gross
                     parts_gross = float(args[0].get(advisor_name, 0))
                     sheet.update_cell(row_index + 1, date_column_index, parts_gross)
-                    
-                    # Apply black text formatting to updated cells
                     black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
                     format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
                     format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
+                elif handle_four_outputs:
+                    rec_count = int(args[0].get(advisor_name, 0))
+                    rec_sold_count = int(args[1].get(advisor_name, 0))
+                    rec_amount = float(args[2].get(advisor_name, 0))
+                    rec_sold_amount = float(args[3].get(advisor_name, 0))
+                    
+                    sheet.update_cell(row_index, date_column_index, rec_count)
+                    sheet.update_cell(row_index + 1, date_column_index, rec_sold_count)
+                    sheet.update_cell(row_index + 2, date_column_index, rec_amount)
+                    sheet.update_cell(row_index + 3, date_column_index, rec_sold_amount)
+                    
+                    black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 2, date_column_index)}", black_format)
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 3, date_column_index)}", black_format)
                 else:
-                    # For Menu Sales and A-La-Carte: Update Labor and Parts Gross
+            
                     labor_gross = float(args[0].get(advisor_name, 0))
                     parts_gross = float(args[1].get(advisor_name, 0))
                     
@@ -245,6 +243,7 @@ def main():
     menu_sales_file = st.file_uploader("Upload Menu Sales Excel", type=["xlsx"])
     alacarte_file = st.file_uploader("Upload A-La-Carte Excel", type=["xlsx"])
     commodities_file = st.file_uploader("Upload Commodities Excel", type=["xlsx"])
+    recommendations_file = st.file_uploader("Upload Recommendations Excel", type=["xlsx"])
 
     # Date input with default to today's date
     selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d')
@@ -288,7 +287,6 @@ def main():
         df_commodities = pd.read_excel(commodities_file)
         st.write("Commodities data preview:", df_commodities.head())
         
-        # Use the correct column name for Commodities data
         commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Primary Advisor Name")
         if commodities_name_counts.empty and commodities_parts_gross_sums.empty:
             return  # Return early if columns were not found
@@ -297,9 +295,23 @@ def main():
         st.write(f"Commodities Parts Gross Sums: {commodities_parts_gross_sums.to_dict()}")
         
         if st.button("Update Commodities in Google Sheet"):
-            # Handle only the available outputs (2 in this case)
             update_google_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, date=selected_date, start_row=8, handle_two_outputs=True)
             st.success("Commodities data updated successfully.")
+
+    # Process Recommendations data
+    if recommendations_file is not None:
+        df_recommendations = pd.read_excel(recommendations_file)
+        st.write("Recommendations data preview:", df_recommendations.head())
+        
+        rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Primary Advisor Name")
+        st.write(f"Recommendations Count: {rec_count.to_dict()}")
+        st.write(f"Recommendations Sold Count: {rec_sold_count.to_dict()}")
+        st.write(f"Recommendations Amount: {rec_amount.to_dict()}")
+        st.write(f"Recommendations Sold Amount: {rec_sold_amount.to_dict()}")
+        
+        if st.button("Update Recommendations in Google Sheet"):
+            update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=12, handle_four_outputs=True)
+            st.success("Recommendations data updated successfully.")
 
 if __name__ == "__main__":
     main()
