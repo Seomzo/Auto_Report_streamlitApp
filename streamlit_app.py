@@ -156,15 +156,15 @@ def process_commodities_data(df, names_column="Primary Advisor Name"):
     
     return name_counts, parts_gross_sums
 
-def update_google_sheet(sheet, name_counts, *args, date, start_row):
-    headers = sheet.row_values(2)  # Get headers from the sheet, assuming date is in row 2
+def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False):
+    headers = sheet.row_values(2)  # Assuming date is in row 2
     if date in headers:
         date_column_index = headers.index(date) + 1
     else:
         st.error(f"Date {date} not found in the sheet.")
         return
     
-    sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]  # List of advisor names in the sheet
+    sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]  # Adjust if advisors are in a different column
     
     for advisor_name in name_counts.index:
         try:
@@ -174,15 +174,31 @@ def update_google_sheet(sheet, name_counts, *args, date, start_row):
                 # Update Count
                 sheet.update_cell(row_index, date_column_index, int(name_counts[advisor_name]))
                 
-                # Update subsequent rows based on additional arguments
-                for i, output in enumerate(args):
-                    # Handle each additional output provided
-                    value = float(output.get(advisor_name, 0)) if isinstance(output, pd.Series) else 0
-                    sheet.update_cell(row_index + i + 1, date_column_index, value)
+                if handle_two_outputs:
+                    # For Commodities: Only update Parts Gross
+                    parts_gross = float(args[0].get(advisor_name, 0))
+                    sheet.update_cell(row_index + 1, date_column_index, parts_gross)
                     
-                    # Apply black text formatting to the updated cells
+                    # Apply black text formatting to updated cells
                     black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
-                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + i + 1, date_column_index)}", black_format)
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
+                else:
+                    # For Menu Sales and A-La-Carte: Update Labor and Parts Gross
+                    labor_gross = float(args[0].get(advisor_name, 0))
+                    parts_gross = float(args[1].get(advisor_name, 0))
+                    
+                    # Update Labor Gross
+                    sheet.update_cell(row_index + 1, date_column_index, labor_gross)
+                    
+                    # Update Parts Gross
+                    sheet.update_cell(row_index + 2, date_column_index, parts_gross)
+                    
+                    # Apply black text formatting to updated cells
+                    black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 2, date_column_index)}", black_format)
             else:
                 st.warning(f"{advisor_name} not found in the Google Sheet.")
         except gspread.exceptions.APIError as e:
@@ -250,7 +266,7 @@ def main():
         st.write(f"Menu Parts Gross Sums: {menu_parts_gross_sums.to_dict()}")
         
         if st.button("Update Menu Sales in Google Sheet"):
-            update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, date=selected_date, start_row=6)  # Adjust start_row as per your sheet layout
+            update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, date=selected_date, start_row=6)
             st.success("Menu Sales data updated successfully.")
 
     # Process A-La-Carte data
@@ -264,7 +280,7 @@ def main():
         st.write(f"A-La-Carte Parts Gross Sums: {alacarte_parts_gross_sums.to_dict()}")
         
         if st.button("Update A-La-Carte in Google Sheet"):
-            update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, date=selected_date, start_row=9)  # Adjust start_row as per your sheet layout
+            update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, date=selected_date, start_row=9)
             st.success("A-La-Carte data updated successfully.")
 
     # Process Commodities data
