@@ -156,39 +156,33 @@ def process_commodities_data(df, names_column="Primary Advisor Name"):
     
     return name_counts, parts_gross_sums
 
-def update_google_sheet(sheet, name_counts, labor_gross_sums, parts_gross_sums, date, start_row):
-    headers = sheet.row_values(2)  # Get headers from the sheet, setting date row index to 2
+def update_google_sheet(sheet, name_counts, *args, date, start_row):
+    headers = sheet.row_values(2)  # Get headers from the sheet, assuming date is in row 2
     if date in headers:
         date_column_index = headers.index(date) + 1
     else:
         st.error(f"Date {date} not found in the sheet.")
         return
     
-    sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]  # Adjust if advisors are in a different column
+    sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]  # List of advisor names in the sheet
     
     for advisor_name in name_counts.index:
         try:
             if advisor_name in sheet_advisor_names:
-                row_index = sheet_advisor_names.index(advisor_name) + start_row  # Adjust row index based on actual sheet layout
+                row_index = sheet_advisor_names.index(advisor_name) + start_row  # Find the row for the advisor
                 
                 # Update Count
                 sheet.update_cell(row_index, date_column_index, int(name_counts[advisor_name]))
                 
-                # Check if labor_gross_sums and parts_gross_sums are provided, if not use default values
-                labor_gross = float(labor_gross_sums.get(advisor_name, 0))
-                parts_gross = float(parts_gross_sums.get(advisor_name, 0))
-                
-                # Update Labor Gross
-                sheet.update_cell(row_index + 1, date_column_index, labor_gross)
-                
-                # Update Parts Gross
-                sheet.update_cell(row_index + 2, date_column_index, parts_gross)
-                
-                # Apply black text formatting
-                black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
-                format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
-                format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
-                format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 2, date_column_index)}", black_format)
+                # Update subsequent rows based on additional arguments
+                for i, output in enumerate(args):
+                    # Handle each additional output provided
+                    value = float(output.get(advisor_name, 0)) if isinstance(output, pd.Series) else 0
+                    sheet.update_cell(row_index + i + 1, date_column_index, value)
+                    
+                    # Apply black text formatting to the updated cells
+                    black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + i + 1, date_column_index)}", black_format)
             else:
                 st.warning(f"{advisor_name} not found in the Google Sheet.")
         except gspread.exceptions.APIError as e:
@@ -197,6 +191,100 @@ def update_google_sheet(sheet, name_counts, labor_gross_sums, parts_gross_sums, 
             st.error(f"An error occurred: {e}")
 
 def main():
+    set_bg_color()
+
+    st.title("Google Sheet Updater for Advisors")
+
+    st.markdown(
+        """
+        <div class='rounded-square'>
+            <p><b>Instructions:</b></p>
+            <ul>
+                <li>Please share the Google Sheet with the following email:</li>
+                <p style='margin-left: 20px; display: flex; align-items: center;'>
+                    <code style='flex: 1; white-space: nowrap;'>auto-report@auto-pop-report.iam.gserviceaccount.com</code> 
+                    <button id="copy-button" class="copy-btn">Copy Email</button>
+                </p>
+                <li>Make sure to give the email <b>Editor</b> permissions.</li>
+                <li>Ensure there are no other restrictions or permissions on the sheet.</li>
+            </ul>
+        </div>
+
+        <script>
+        const copyButton = document.getElementById('copy-button');
+        copyButton.addEventListener('click', function() {
+            navigator.clipboard.writeText('auto-report@auto-pop-report.iam.gserviceaccount.com');
+            copyButton.textContent = 'Email Copied';
+            setTimeout(() => { copyButton.textContent = 'Copy Email'; }, 2000);
+        });
+        </script>
+        """,
+        unsafe_allow_html=True
+    )
+
+    sheet_name = st.text_input("Enter the Google Sheet name:", "August Advisor Performance-OMAR")
+    worksheet_name = st.text_input("Enter the Worksheet (tab) name:", "Input")
+
+    # File uploads for different sections
+    menu_sales_file = st.file_uploader("Upload Menu Sales Excel", type=["xlsx"])
+    alacarte_file = st.file_uploader("Upload A-La-Carte Excel", type=["xlsx"])
+    commodities_file = st.file_uploader("Upload Commodities Excel", type=["xlsx"])
+
+    # Date input with default to today's date
+    selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d')
+
+    # Process Menu Sales data
+    if menu_sales_file is not None and sheet_name and worksheet_name:
+        df_menu_sales = pd.read_excel(menu_sales_file)
+        st.write("Menu Sales data preview:", df_menu_sales.head())
+        
+        sheet = connect_to_google_sheet(sheet_name, worksheet_name)
+        if sheet is None:
+            st.error("Failed to connect to the Google Sheet. Please check the inputs and try again.")
+            return
+        
+        menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
+        st.write(f"Menu Name counts: {menu_name_counts.to_dict()}")
+        st.write(f"Menu Labor Gross Sums: {menu_labor_gross_sums.to_dict()}")
+        st.write(f"Menu Parts Gross Sums: {menu_parts_gross_sums.to_dict()}")
+        
+        if st.button("Update Menu Sales in Google Sheet"):
+            update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, selected_date, start_row=6)
+            st.success("Menu Sales data updated successfully.")
+        
+    # Process A-La-Carte data
+    if alacarte_file is not None and sheet_name and worksheet_name:
+        df_alacarte = pd.read_excel(alacarte_file)
+        st.write("A-La-Carte data preview:", df_alacarte.head())
+        
+        sheet = connect_to_google_sheet(sheet_name, worksheet_name)
+        if sheet is None:
+            st.error("Failed to connect to the Google Sheet. Please check the inputs and try again.")
+            return
+        
+        alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
+        st.write(f"A-La-Carte Name counts: {alacarte_name_counts.to_dict()}")
+        st.write(f"A-La-Carte Labor Gross Sums: {alacarte_labor_gross_sums.to_dict()}")
+        st.write(f"A-La-Carte Parts Gross Sums: {alacarte_parts_gross_sums.to_dict()}")
+        
+        if st.button("Update A-La-Carte in Google Sheet"):
+            update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, selected_date, start_row=9)
+            st.success("A-La-Carte data updated successfully.")
+
+    # Process Commodities data
+    if commodities_file is not None and sheet_name and worksheet_name:
+        df_commodities = pd.read_excel(commodities_file)
+        st.write("Commodities data preview:", df_commodities.head())
+        
+        sheet = connect_to_google_sheet(sheet_name, worksheet_name)
+        if sheet is None:
+            st.error("Failed to connect to the Google Sheet. Please check the inputs and try again.")
+            return
+        
+        # Use the correct column name for Commodities data
+        commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Primary Advisor Name")
+        if commodities_name_counts.empty and commodities_parts_gross
+
     set_bg_color()
 
     st.title("Google Sheet Updater for Advisors")
