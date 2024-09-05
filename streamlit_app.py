@@ -319,7 +319,7 @@ def main():
     menu_sales_file = st.file_uploader("Upload Menu Sales Excel", type=["xlsx"])
     alacarte_file = st.file_uploader("Upload A-La-Carte Excel", type=["xlsx"])
     commodities_file = st.file_uploader("Upload Commodities Excel", type=["xlsx"])
-    recommendations_file = st.file_uploader("Upload Recommendations Excel", type=["xlsx"])
+    recommendations_file = st.file_uploader("Upload Recommendations Excel", type=["xlsx"])  # Make sure this line is included
 
     # Date input with default to today's date
     selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d')
@@ -374,21 +374,20 @@ def main():
             update_google_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, date=selected_date, start_row=8, handle_two_outputs=True)
             st.success("Commodities data updated successfully.")
 
-# Process Recommendations data
-if recommendations_file is not None:
-    df_recommendations = pd.read_excel(recommendations_file)
-    st.write("Recommendations data preview:", df_recommendations.head())
-    
-    rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
-    st.write(f"Recommendations Count: {rec_count.to_dict()}")
-    st.write(f"Recommendations Sold Count: {rec_sold_count.to_dict()}")
-    st.write(f"Recommendations Amount: {rec_amount.to_dict()}")
-    st.write(f"Recommendations Sold Amount: {rec_sold_amount.to_dict()}")
-    
-    if st.button("Update Recommendations in Google Sheet"):
-        update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=12)
-        st.success("Recommendations data updated successfully.")
-
+    # Process Recommendations data
+    if recommendations_file is not None:
+        df_recommendations = pd.read_excel(recommendations_file)
+        st.write("Recommendations data preview:", df_recommendations.head())
+        
+        rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
+        st.write(f"Recommendations Count: {rec_count.to_dict()}")
+        st.write(f"Recommendations Sold Count: {rec_sold_count.to_dict()}")
+        st.write(f"Recommendations Amount: {rec_amount.to_dict()}")
+        st.write(f"Recommendations Sold Amount: {rec_sold_amount.to_dict()}")
+        
+        if st.button("Update Recommendations in Google Sheet"):
+            update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=12)
+            st.success("Recommendations data updated successfully.")
 
 if __name__ == "__main__":
     main()
