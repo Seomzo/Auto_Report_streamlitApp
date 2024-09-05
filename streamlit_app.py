@@ -128,8 +128,20 @@ def process_alacarte_data(df, names_column):
     
     return name_counts, labor_gross_sums, parts_gross_sums
 
+def process_commodities_data(df, names_column):
+    df[names_column] = df[names_column].str.strip().str.upper()  # Normalize to uppercase and strip spaces
+    
+    # Clean data
+    df['Parts Gross'] = clean_column_data(df['Parts Gross'])  # Assuming 'Parts Gross' is the column name
+    
+    # Calculate counts and sums
+    name_counts = df[names_column].value_counts()  # Regular name count
+    parts_gross_sums = df.groupby(names_column)['Parts Gross'].sum()
+    
+    return name_counts, parts_gross_sums
+
 def update_google_sheet(sheet, name_counts, labor_gross_sums, parts_gross_sums, date, start_row):
-    headers = sheet.row_values(2)  # Get headers from the sheet, adjust date row index as needed
+    headers = sheet.row_values(2)  # Get headers from the sheet, setting date row index to 2
     if date in headers:
         date_column_index = headers.index(date) + 1
     else:
@@ -156,6 +168,37 @@ def update_google_sheet(sheet, name_counts, labor_gross_sums, parts_gross_sums, 
                 format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
                 format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
                 format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 2, date_column_index)}", black_format)
+            else:
+                st.warning(f"{advisor_name} not found in the Google Sheet.")
+        except gspread.exceptions.APIError as e:
+            st.error(f"Error updating cell for {advisor_name}: {e}")
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
+
+def update_commodities_in_sheet(sheet, name_counts, parts_gross_sums, date, start_row):
+    headers = sheet.row_values(2)  # Get headers from the sheet, setting date row index to 2
+    if date in headers:
+        date_column_index = headers.index(date) + 1
+    else:
+        st.error(f"Date {date} not found in the sheet.")
+        return
+    
+    sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]  # Adjust if advisors are in a different column
+    
+    for advisor_name in name_counts.index:
+        try:
+            if advisor_name in sheet_advisor_names:
+                row_index = sheet_advisor_names.index(advisor_name) + start_row  # Adjust row index based on actual sheet layout
+                # Update Commodity Count
+                sheet.update_cell(row_index, date_column_index, int(name_counts[advisor_name]))
+                
+                # Update Parts Gross
+                sheet.update_cell(row_index + 1, date_column_index, float(parts_gross_sums[advisor_name]))
+                
+                                # Apply black text formatting
+                black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
+                format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
+                format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
             else:
                 st.warning(f"{advisor_name} not found in the Google Sheet.")
         except gspread.exceptions.APIError as e:
@@ -201,8 +244,8 @@ def main():
     # File uploads for different sections
     menu_sales_file = st.file_uploader("Upload Menu Sales Excel", type=["xlsx"])
     alacarte_file = st.file_uploader("Upload A-La-Carte Excel", type=["xlsx"])
+    commodities_file = st.file_uploader("Upload Commodities Excel", type=["xlsx"])
 
-   
     # Date input with default to today's date
     selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d')
 
@@ -243,6 +286,24 @@ def main():
         if st.button("Update A-La-Carte in Google Sheet"):
             update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, selected_date, start_row=5)  # Adjust start_row as per your sheet layout
             st.success("A-La-Carte data updated successfully.")
+
+    # Process Commodities data
+    if commodities_file is not None and sheet_name and worksheet_name:
+        df_commodities = pd.read_excel(commodities_file)
+        st.write("Commodities data preview:", df_commodities.head())
+        
+        sheet = connect_to_google_sheet(sheet_name, worksheet_name)
+        if sheet is None:
+            st.error("Failed to connect to the Google Sheet. Please check the inputs and try again.")
+            return
+        
+        commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Advisor Name")
+        st.write(f"Commodities Name counts: {commodities_name_counts.to_dict()}")
+        st.write(f"Commodities Parts Gross Sums: {commodities_parts_gross_sums.to_dict()}")
+        
+        if st.button("Update Commodities in Google Sheet"):
+            update_commodities_in_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, selected_date, start_row=) 8 # Adjust start_row as per your sheet layout
+            st.success("Commodities data updated successfully.")
 
 if __name__ == "__main__":
     main()
