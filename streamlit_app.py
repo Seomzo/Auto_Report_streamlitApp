@@ -129,7 +129,7 @@ def process_alacarte_data(df, names_column):
     return name_counts, labor_gross_sums, parts_gross_sums
 
 def update_google_sheet(sheet, name_counts, labor_gross_sums, parts_gross_sums, date, start_row):
-    headers = sheet.row_values(2)  # Get headers from the sheet, setting date row index to 2
+    headers = sheet.row_values(2)  # Get headers from the sheet, adjust date row index as needed
     if date in headers:
         date_column_index = headers.index(date) + 1
     else:
@@ -198,10 +198,11 @@ def main():
     sheet_name = st.text_input("Enter the Google Sheet name:", "August Advisor Performance-OMAR")
     worksheet_name = st.text_input("Enter the Worksheet (tab) name:", "Menu Sales")
 
-       # File uploads for different sections
+    # File uploads for different sections
     menu_sales_file = st.file_uploader("Upload Menu Sales Excel", type=["xlsx"])
     alacarte_file = st.file_uploader("Upload A-La-Carte Excel", type=["xlsx"])
 
+   
     # Date input with default to today's date
     selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d')
 
@@ -223,8 +224,8 @@ def main():
         if st.button("Update Menu Sales in Google Sheet"):
             update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, selected_date, start_row=6)  # Adjust start_row as per your sheet layout
             st.success("Menu Sales data updated successfully.")
-        
-      # Process A-La-Carte data
+
+    # Process A-La-Carte data
     if alacarte_file is not None and sheet_name and worksheet_name:
         df_alacarte = pd.read_excel(alacarte_file)
         st.write("A-La-Carte data preview:", df_alacarte.head())
