@@ -127,9 +127,6 @@ def process_alacarte_data(df, names_column):
     return name_counts, labor_gross_sums, parts_gross_sums
 
 def process_commodities_data(df, names_column="Primary Advisor Name"):
-    # Display available columns for debugging
-    st.write("Available columns in Commodities data:", df.columns.tolist())
-    
     # Ensure no leading/trailing spaces in column names
     df.columns = df.columns.str.strip()
     
@@ -254,7 +251,7 @@ def main():
         st.write(f"Menu Parts Gross Sums: {menu_parts_gross_sums.to_dict()}")
         
         if st.button("Update Menu Sales in Google Sheet"):
-            update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, selected_date, start_row=2)
+            update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, selected_date, start_row=6)
             st.success("Menu Sales data updated successfully.")
 
     # Process A-La-Carte data
@@ -273,7 +270,7 @@ def main():
         st.write(f"A-La-Carte Parts Gross Sums: {alacarte_parts_gross_sums.to_dict()}")
         
         if st.button("Update A-La-Carte in Google Sheet"):
-            update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, selected_date, start_row=5)
+            update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, selected_date, start_row=9)
             st.success("A-La-Carte data updated successfully.")
 
     # Process Commodities data
@@ -295,8 +292,10 @@ def main():
         st.write(f"Commodities Parts Gross Sums: {commodities_parts_gross_sums.to_dict()}")
         
         if st.button("Update Commodities in Google Sheet"):
-            update_google_sheet(sheet, commodities_name_counts, pd.Series(dtype='float'), commodities_parts_gross_sums, selected_date, start_row=8)
+            update_google_sheet(sheet, commodities_name_counts, pd.Series(dtype='float'), commodities_parts_gross_sums, selected_date, start_row=12)
             st.success("Commodities data updated successfully.")
 
 if __name__ == "__main__":
     main()
+
+   
