@@ -157,10 +157,11 @@ def process_recommendations_data(df, names_column="Name"):
     # Clean and process data
     rec_count = df.groupby(names_column)['Recommendations'].sum()
     rec_sold_count = df.groupby(names_column)['Recommendations Sold'].sum()
-    rec_amount = df.groupby(names_column)['Recommendations $ amount'].sum()
-    rec_sold_amount = df.groupby(names_column)['Recommendations Sold $ amount'].sum()
+    rec_amount = clean_column_data(df.groupby(names_column)['Recommendations $ amount'].sum())
+    rec_sold_amount = clean_column_data(df.groupby(names_column)['Recommendations Sold $ amount'].sum())
     
     return rec_count, rec_sold_count, rec_amount, rec_sold_amount
+
 
 
 def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False):
@@ -319,7 +320,7 @@ def main():
     menu_sales_file = st.file_uploader("Upload Menu Sales Excel", type=["xlsx"])
     alacarte_file = st.file_uploader("Upload A-La-Carte Excel", type=["xlsx"])
     commodities_file = st.file_uploader("Upload Commodities Excel", type=["xlsx"])
-    recommendations_file = st.file_uploader("Upload Recommendations Excel", type=["xlsx"])  # Make sure this line is included
+    recommendations_file = st.file_uploader("Upload Recommendations Excel", type=["xlsx"])
 
     # Date input with default to today's date
     selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d')
@@ -386,8 +387,9 @@ def main():
         st.write(f"Recommendations Sold Amount: {rec_sold_amount.to_dict()}")
         
         if st.button("Update Recommendations in Google Sheet"):
-            update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=12)
+            update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=12, handle_two_outputs=False)
             st.success("Recommendations data updated successfully.")
 
 if __name__ == "__main__":
     main()
+
