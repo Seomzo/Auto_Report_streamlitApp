@@ -266,7 +266,7 @@ def main():
         st.write(f"Menu Parts Gross Sums: {menu_parts_gross_sums.to_dict()}")
         
         if st.button("Update Menu Sales in Google Sheet"):
-            update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, date=selected_date, start_row=6)
+            update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, date=selected_date, start_row=2)
             st.success("Menu Sales data updated successfully.")
 
     # Process A-La-Carte data
@@ -280,7 +280,7 @@ def main():
         st.write(f"A-La-Carte Parts Gross Sums: {alacarte_parts_gross_sums.to_dict()}")
         
         if st.button("Update A-La-Carte in Google Sheet"):
-            update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, date=selected_date, start_row=9)
+            update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, date=selected_date, start_row=5)
             st.success("A-La-Carte data updated successfully.")
 
     # Process Commodities data
@@ -298,7 +298,7 @@ def main():
         
         if st.button("Update Commodities in Google Sheet"):
             # Handle only the available outputs (2 in this case)
-            update_google_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, date=selected_date, start_row=12, handle_two_outputs=True)
+            update_google_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, date=selected_date, start_row=8, handle_two_outputs=True)
             st.success("Commodities data updated successfully.")
 
 if __name__ == "__main__":
