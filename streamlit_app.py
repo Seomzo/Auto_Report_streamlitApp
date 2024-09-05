@@ -128,7 +128,7 @@ def process_alacarte_data(df, names_column):
     
     return name_counts, labor_gross_sums, parts_gross_sums
 
-def process_commodities_data(df, names_column):
+def process_commodities_data(df, names_column="Primary Advisor Name"):
     # Display available columns for debugging
     st.write("Available columns in Commodities data:", df.columns.tolist())
     
@@ -151,6 +151,7 @@ def process_commodities_data(df, names_column):
     parts_gross_sums = df.groupby(names_column)['Opcode Parts Gross'].sum()
     
     return name_counts, parts_gross_sums
+
 
 
 def update_google_sheet(sheet, name_counts, labor_gross_sums, parts_gross_sums, date, start_row):
@@ -310,7 +311,8 @@ def main():
             st.error("Failed to connect to the Google Sheet. Please check the inputs and try again.")
             return
         
-        commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Advisor Name")
+        # Use the correct column name for Commodities data
+        commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Primary Advisor Name")
         if commodities_name_counts.empty and commodities_parts_gross_sums.empty:
             return  # Return early if columns were not found
 
