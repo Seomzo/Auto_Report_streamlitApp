@@ -150,7 +150,7 @@ def process_commodities_data(df, names_column="Primary Advisor Name"):
         st.error(f"Column '{gross_column}' not found in the uploaded Commodities Excel. Please check the column names.")
         return pd.Series(dtype='int'), pd.Series(dtype='float')  # Return empty Series if column not found
 
-    # Clean data
+    # Clean data in the Gross column
     df[gross_column] = clean_column_data(df[gross_column])
     
     # Calculate counts and sums
@@ -161,7 +161,7 @@ def process_commodities_data(df, names_column="Primary Advisor Name"):
 
 
 
-def update_google_sheet(sheet, name_counts, labor_gross_sums, parts_gross_sums, date, start_row):
+def update_google_sheet(sheet, name_counts, parts_gross_sums, date, start_row):
     headers = sheet.row_values(2)  # Get headers from the sheet, setting date row index to 2
     if date in headers:
         date_column_index = headers.index(date) + 1
@@ -179,21 +179,14 @@ def update_google_sheet(sheet, name_counts, labor_gross_sums, parts_gross_sums, 
                 # Update Count
                 sheet.update_cell(row_index, date_column_index, int(name_counts[advisor_name]))
                 
-                # Check if labor_gross_sums and parts_gross_sums are provided, if not use default values
-                labor_gross = float(labor_gross_sums.get(advisor_name, 0))
-                parts_gross = float(parts_gross_sums.get(advisor_name, 0))
-                
-                # Update Labor Gross
-                sheet.update_cell(row_index + 1, date_column_index, labor_gross)
-                
                 # Update Parts Gross
-                sheet.update_cell(row_index + 2, date_column_index, parts_gross)
+                parts_gross = float(parts_gross_sums.get(advisor_name, 0))
+                sheet.update_cell(row_index + 1, date_column_index, parts_gross)
                 
                 # Apply black text formatting
                 black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
                 format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
                 format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
-                format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 2, date_column_index)}", black_format)
             else:
                 st.warning(f"{advisor_name} not found in the Google Sheet.")
         except gspread.exceptions.APIError as e:
@@ -276,25 +269,6 @@ def main():
     # Date input with default to today's date
     selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d')
 
-    # Process A-La-Carte data
-    if alacarte_file is not None and sheet_name and worksheet_name:
-        df_alacarte = pd.read_excel(alacarte_file)
-        st.write("A-La-Carte data preview:", df_alacarte.head())
-        
-        sheet = connect_to_google_sheet(sheet_name, worksheet_name)
-        if sheet is None:
-            st.error("Failed to connect to the Google Sheet. Please check the inputs and try again.")
-            return
-        
-        alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
-        st.write(f"A-La-Carte Name counts: {alacarte_name_counts.to_dict()}")
-        st.write(f"A-La-Carte Labor Gross Sums: {alacarte_labor_gross_sums.to_dict()}")
-        st.write(f"A-La-Carte Parts Gross Sums: {alacarte_parts_gross_sums.to_dict()}")
-        
-        if st.button("Update A-La-Carte in Google Sheet"):
-            update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, selected_date, start_row=9)
-            st.success("A-La-Carte data updated successfully.")
-
     # Process Commodities data
     if commodities_file is not None and sheet_name and worksheet_name:
         df_commodities = pd.read_excel(commodities_file)
@@ -314,8 +288,7 @@ def main():
         st.write(f"Commodities Parts Gross Sums: {commodities_parts_gross_sums.to_dict()}")
         
         if st.button("Update Commodities in Google Sheet"):
-            # Correct the function call to provide both gross sums correctly
-            update_google_sheet(sheet, commodities_name_counts, pd.Series(dtype='float'), commodities_parts_gross_sums, selected_date, start_row=12)
+            update_google_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, selected_date, start_row=8)
             st.success("Commodities data updated successfully.")
 
 if __name__ == "__main__":
