@@ -16,7 +16,67 @@ def set_bg_color():
     st.markdown(
         """
         <style>
-        /* Light mode and dark mode styles */
+        /* Light mode styles */
+        @media (prefers-color-scheme: light) {
+            .stApp {
+                background-color: #f7f8fa;  /* Light background color */
+                color: #000;  /* Light mode text color */
+            }
+            .rounded-square {
+                background-color: white;
+                border: 1px solid #ddd;  /* Light mode border color */
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 20px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);  /* Light shadow for depth */
+            }
+            .copy-btn {
+                color: #fff;
+                background-color: #1f77b4;  /* Modern button color */
+                border: none;
+                padding: 8px 16px;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 14px;
+                transition: background-color 0.3s ease;
+                width: auto;  /* Adjust to fit the content */
+                display: inline-block;
+            }
+            .copy-btn:hover {
+                background-color: #1a5a8a;  /* Darker shade on hover */
+            }
+        }
+
+        /* Dark mode styles */
+        @media (prefers-color-scheme: dark) {
+            .stApp {
+                background-color: #2c2c2c;  /* Dark background color */
+                color: #e0e0e0;  /* Dark mode text color */
+            }
+            .rounded-square {
+                background-color: #3a3a3a;
+                border: 1px solid #555;  /* Dark mode border color */
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 20px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);  /* Dark shadow for depth */
+            }
+            .copy-btn {
+                color: #000;
+                background-color: #90caf9;  /* Modern button color for dark mode */
+                border: none;
+                padding: 8px 16px;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 14px;
+                transition: background-color 0.3s ease;
+                width: auto;  /* Adjust to fit the content */
+                display: inline-block;
+            }
+            .copy-btn:hover {
+                background-color: #42a5f5;  /* Darker shade on hover */
+            }
+        }
         </style>
         """,
         unsafe_allow_html=True
@@ -54,8 +114,22 @@ def process_menu_sales_data(df, names_column):
     
     return name_counts, labor_gross_sums, parts_gross_sums
 
-def update_google_sheet(sheet, name_counts, labor_gross_sums, parts_gross_sums, date):
-    headers = sheet.row_values(2)  # Get headers from the sheet assuming row 3 has the dates
+def process_alacarte_data(df, names_column):
+    df[names_column] = df[names_column].str.strip().str.upper()  # Normalize to uppercase and strip spaces
+    
+    # Clean data
+    df['Opcode Labor Gross'] = clean_column_data(df['Opcode Labor Gross'])
+    df['Opcode Parts Gross'] = clean_column_data(df['Opcode Parts Gross'])
+    
+    # Calculate counts and sums
+    name_counts = df[names_column].value_counts()  # Regular name count
+    labor_gross_sums = df.groupby(names_column)['Opcode Labor Gross'].sum()
+    parts_gross_sums = df.groupby(names_column)['Opcode Parts Gross'].sum()
+    
+    return name_counts, labor_gross_sums, parts_gross_sums
+
+def update_google_sheet(sheet, name_counts, labor_gross_sums, parts_gross_sums, date, start_row):
+    headers = sheet.row_values(2)  # Get headers from the sheet, setting date row index to 2
     if date in headers:
         date_column_index = headers.index(date) + 1
     else:
@@ -67,8 +141,8 @@ def update_google_sheet(sheet, name_counts, labor_gross_sums, parts_gross_sums, 
     for advisor_name in name_counts.index:
         try:
             if advisor_name in sheet_advisor_names:
-                row_index = sheet_advisor_names.index(advisor_name) + 2  # Adjust row index based on actual sheet layout
-                # Update Menu Sales Count
+                row_index = sheet_advisor_names.index(advisor_name) + start_row  # Adjust row index based on actual sheet layout
+                # Update Count
                 sheet.update_cell(row_index, date_column_index, int(name_counts[advisor_name]))
                 
                 # Update Labor Gross
@@ -124,29 +198,50 @@ def main():
     sheet_name = st.text_input("Enter the Google Sheet name:", "August Advisor Performance-OMAR")
     worksheet_name = st.text_input("Enter the Worksheet (tab) name:", "Menu Sales")
 
-    # File uploads for different sections
+       # File uploads for different sections
     menu_sales_file = st.file_uploader("Upload Menu Sales Excel", type=["xlsx"])
-    
+    alacarte_file = st.file_uploader("Upload A-La-Carte Excel", type=["xlsx"])
+
     # Date input with default to today's date
     selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d')
-    
+
+    # Process Menu Sales data
     if menu_sales_file is not None and sheet_name and worksheet_name:
-        df = pd.read_excel(menu_sales_file)
-        st.write("Menu Sales data preview:", df.head())
+        df_menu_sales = pd.read_excel(menu_sales_file)
+        st.write("Menu Sales data preview:", df_menu_sales.head())
         
         sheet = connect_to_google_sheet(sheet_name, worksheet_name)
         if sheet is None:
             st.error("Failed to connect to the Google Sheet. Please check the inputs and try again.")
             return
         
-        name_counts, labor_gross_sums, parts_gross_sums = process_menu_sales_data(df, "Advisor Name")
-        st.write(f"Name counts: {name_counts.to_dict()}")
-        st.write(f"Labor Gross Sums: {labor_gross_sums.to_dict()}")
-        st.write(f"Parts Gross Sums: {parts_gross_sums.to_dict()}")
+        menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
+        st.write(f"Menu Name counts: {menu_name_counts.to_dict()}")
+        st.write(f"Menu Labor Gross Sums: {menu_labor_gross_sums.to_dict()}")
+        st.write(f"Menu Parts Gross Sums: {menu_parts_gross_sums.to_dict()}")
         
-        if st.button("Update Google Sheet"):
-            update_google_sheet(sheet, name_counts, labor_gross_sums, parts_gross_sums, selected_date)
-            st.success("Google Sheet updated successfully.")
+        if st.button("Update Menu Sales in Google Sheet"):
+            update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, selected_date, start_row=6)  # Adjust start_row as per your sheet layout
+            st.success("Menu Sales data updated successfully.")
+        
+      # Process A-La-Carte data
+    if alacarte_file is not None and sheet_name and worksheet_name:
+        df_alacarte = pd.read_excel(alacarte_file)
+        st.write("A-La-Carte data preview:", df_alacarte.head())
+        
+        sheet = connect_to_google_sheet(sheet_name, worksheet_name)
+        if sheet is None:
+            st.error("Failed to connect to the Google Sheet. Please check the inputs and try again.")
+            return
+        
+        alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
+        st.write(f"A-La-Carte Name counts: {alacarte_name_counts.to_dict()}")
+        st.write(f"A-La-Carte Labor Gross Sums: {alacarte_labor_gross_sums.to_dict()}")
+        st.write(f"A-La-Carte Parts Gross Sums: {alacarte_parts_gross_sums.to_dict()}")
+        
+        if st.button("Update A-La-Carte in Google Sheet"):
+            update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, selected_date, start_row=9)  # Adjust start_row as per your sheet layout
+            st.success("A-La-Carte data updated successfully.")
 
 if __name__ == "__main__":
     main()
