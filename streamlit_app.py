@@ -127,6 +127,9 @@ def process_alacarte_data(df, names_column):
     return name_counts, labor_gross_sums, parts_gross_sums
 
 def process_commodities_data(df, names_column="Primary Advisor Name"):
+    # Display available columns for debugging
+    st.write("Available columns in Commodities data:", df.columns.tolist())
+    
     # Ensure no leading/trailing spaces in column names
     df.columns = df.columns.str.strip()
     
@@ -139,7 +142,7 @@ def process_commodities_data(df, names_column="Primary Advisor Name"):
     df[names_column] = df[names_column].str.strip().str.upper()  # Normalize to uppercase and strip spaces
     
     # Check for the correct 'Gross' column
-    gross_column = 'Gross'  # Adjust this if the column name is different
+    gross_column = 'Gross'
     if gross_column not in df.columns:
         st.error(f"Column '{gross_column}' not found in the uploaded Commodities Excel. Please check the column names.")
         return pd.Series(dtype='int'), pd.Series(dtype='float')  # Return empty Series if column not found
@@ -171,12 +174,14 @@ def update_google_sheet(sheet, name_counts, labor_gross_sums, parts_gross_sums, 
                 # Update Count
                 sheet.update_cell(row_index, date_column_index, int(name_counts[advisor_name]))
                 
-                # Update Labor Gross if available
+                # Check if labor_gross_sums and parts_gross_sums are provided, if not use default values
                 labor_gross = float(labor_gross_sums.get(advisor_name, 0))
+                parts_gross = float(parts_gross_sums.get(advisor_name, 0))
+                
+                # Update Labor Gross
                 sheet.update_cell(row_index + 1, date_column_index, labor_gross)
                 
                 # Update Parts Gross
-                parts_gross = float(parts_gross_sums.get(advisor_name, 0))
                 sheet.update_cell(row_index + 2, date_column_index, parts_gross)
                 
                 # Apply black text formatting
@@ -223,7 +228,6 @@ def main():
         unsafe_allow_html=True
     )
 
-    # Google Sheet details
     sheet_name = st.text_input("Enter the Google Sheet name:", "August Advisor Performance-OMAR")
     worksheet_name = st.text_input("Enter the Worksheet (tab) name:", "Input")
 
@@ -251,9 +255,9 @@ def main():
         st.write(f"Menu Parts Gross Sums: {menu_parts_gross_sums.to_dict()}")
         
         if st.button("Update Menu Sales in Google Sheet"):
-            update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, selected_date, start_row=6)
+            update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, selected_date, start_row=6)  # Adjust start_row as per your sheet layout
             st.success("Menu Sales data updated successfully.")
-
+        
     # Process A-La-Carte data
     if alacarte_file is not None and sheet_name and worksheet_name:
         df_alacarte = pd.read_excel(alacarte_file)
@@ -270,7 +274,7 @@ def main():
         st.write(f"A-La-Carte Parts Gross Sums: {alacarte_parts_gross_sums.to_dict()}")
         
         if st.button("Update A-La-Carte in Google Sheet"):
-            update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, selected_date, start_row=9)
+            update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, selected_date, start_row=9)  # Adjust start_row as per your sheet layout
             st.success("A-La-Carte data updated successfully.")
 
     # Process Commodities data
@@ -283,7 +287,7 @@ def main():
             st.error("Failed to connect to the Google Sheet. Please check the inputs and try again.")
             return
         
-        # Process commodities data with correct column for advisor name and gross
+        # Use the correct column name for Commodities data
         commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Primary Advisor Name")
         if commodities_name_counts.empty and commodities_parts_gross_sums.empty:
             return  # Return early if columns were not found
@@ -298,4 +302,3 @@ def main():
 if __name__ == "__main__":
     main()
 
-   
