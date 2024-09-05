@@ -380,10 +380,8 @@ def main():
         st.write(f"Recommendations Sold Amount: {rec_sold_amount.to_dict()}")
         
         if st.button("Update Recommendations in Google Sheet"):
-            update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10, handle_two_outputs=False)
+            update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=12, handle_two_outputs=False)
             st.success("Recommendations data updated successfully.")
 
 if __name__ == "__main__":
     main()
-
-
