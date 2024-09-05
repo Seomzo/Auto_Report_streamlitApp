@@ -133,13 +133,33 @@ def process_commodities_data(df, names_column="Primary Advisor Name"):
     return name_counts, parts_gross_sums
 
 def process_recommendations_data(df, names_column="Name"):
+    # Display available columns for debugging
     st.write("Available columns in Recommendations data:", df.columns.tolist())
+    
+    # Ensure no leading/trailing spaces in column names
     df.columns = df.columns.str.strip()
-    df[names_column] = df[names_column].str.strip().str.upper()
-    rec_count = df[names_column].value_counts()
+    
+    # Check if the required column exists
+    if names_column not in df.columns:
+        st.error(f"Column '{names_column}' not found in the uploaded Recommendations Excel. Please check the column names.")
+        return pd.Series(dtype='int'), pd.Series(dtype='int'), pd.Series(dtype='float'), pd.Series(dtype='float')  # Return empty Series if column not found
+
+    # Normalize the advisor names
+    df[names_column] = df[names_column].str.strip().str.upper()  # Normalize to uppercase and strip spaces
+    
+    # Ensure the necessary columns exist
+    required_columns = ['Recommendations', 'Recommendations Sold', 'Recommendations $ amount', 'Recommendations Sold $ amount']
+    for col in required_columns:
+        if col not in df.columns:
+            st.error(f"Column '{col}' not found in the uploaded Recommendations Excel. Please check the column names.")
+            return pd.Series(dtype='int'), pd.Series(dtype='int'), pd.Series(dtype='float'), pd.Series(dtype='float')
+    
+    # Clean and process data
+    rec_count = df.groupby(names_column)['Recommendations'].sum()
     rec_sold_count = df.groupby(names_column)['Recommendations Sold'].sum()
-    rec_amount = df.groupby(names_column)['Recommendations $ amount'].sum()
-    rec_sold_amount = df.groupby(names_column)['Recommendations sold $ amount'].sum()
+    rec_amount = clean_column_data(df.groupby(names_column)['Recommendations $ amount'].sum())
+    rec_sold_amount = clean_column_data(df.groupby(names_column)['Recommendations Sold $ amount'].sum())
+    
     return rec_count, rec_sold_count, rec_amount, rec_sold_amount
 
 def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False, handle_four_outputs=False):
