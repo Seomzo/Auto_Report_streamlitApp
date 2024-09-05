@@ -157,12 +157,68 @@ def process_recommendations_data(df, names_column="Name"):
     # Clean and process data
     rec_count = df.groupby(names_column)['Recommendations'].sum()
     rec_sold_count = df.groupby(names_column)['Recommendations Sold'].sum()
-    rec_amount = clean_column_data(df.groupby(names_column)['Recommendations $ amount'].sum())
-    rec_sold_amount = clean_column_data(df.groupby(names_column)['Recommendations Sold $ amount'].sum())
+    rec_amount = df.groupby(names_column)['Recommendations $ amount'].sum()
+    rec_sold_amount = df.groupby(names_column)['Recommendations Sold $ amount'].sum()
     
     return rec_count, rec_sold_count, rec_amount, rec_sold_amount
 
-def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False, handle_four_outputs=False):
+
+def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False):
+    headers = sheet.row_values(2)  # Assuming date is in row 2
+    if date in headers:
+        date_column_index = headers.index(date) + 1
+    else:
+        st.error(f"Date {date} not found in the sheet.")
+        return
+    
+    sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]  # Adjust if advisors are in a different column
+    
+    for advisor_name in name_counts.index:
+        try:
+            if advisor_name in sheet_advisor_names:
+                row_index = sheet_advisor_names.index(advisor_name) + start_row  # Find the row for the advisor
+                
+                # Update Count
+                sheet.update_cell(row_index, date_column_index, int(name_counts[advisor_name]))
+                
+                if handle_two_outputs:
+                    # For Commodities: Only update Parts Gross
+                    parts_gross = float(args[0].get(advisor_name, 0))
+                    sheet.update_cell(row_index + 1, date_column_index, parts_gross)
+                    
+                    # Apply black text formatting to updated cells
+                    black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
+                else:
+                    # For Recommendations: Update all four outputs
+                    if len(args) == 4:
+                        rec_sold_count = float(args[0].get(advisor_name, 0))
+                        rec_amount = float(args[1].get(advisor_name, 0))
+                        rec_sold_amount = float(args[2].get(advisor_name, 0))
+
+                        # Update Recommendations Sold Count
+                        sheet.update_cell(row_index + 1, date_column_index, rec_sold_count)
+                        
+                        # Update Recommendations Amount
+                        sheet.update_cell(row_index + 2, date_column_index, rec_amount)
+                        
+                        # Update Recommendations Sold Amount
+                        sheet.update_cell(row_index + 3, date_column_index, rec_sold_amount)
+                    
+                    # Apply black text formatting to updated cells
+                    black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index, date_column_index)}", black_format)
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 1, date_column_index)}", black_format)
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 2, date_column_index)}", black_format)
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + 3, date_column_index)}", black_format)
+            else:
+                st.warning(f"{advisor_name} not found in the Google Sheet.")
+        except gspread.exceptions.APIError as e:
+            st.error(f"Error updating cell for {advisor_name}: {e}")
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
+
     headers = sheet.row_values(2)
     if date in headers:
         date_column_index = headers.index(date) + 1
@@ -318,20 +374,21 @@ def main():
             update_google_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, date=selected_date, start_row=8, handle_two_outputs=True)
             st.success("Commodities data updated successfully.")
 
-    # Process Recommendations data
-    if recommendations_file is not None:
-        df_recommendations = pd.read_excel(recommendations_file)
-        st.write("Recommendations data preview:", df_recommendations.head())
-        
-        rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
-        st.write(f"Recommendations Count: {rec_count.to_dict()}")
-        st.write(f"Recommendations Sold Count: {rec_sold_count.to_dict()}")
-        st.write(f"Recommendations Amount: {rec_amount.to_dict()}")
-        st.write(f"Recommendations Sold Amount: {rec_sold_amount.to_dict()}")
-        
-        if st.button("Update Recommendations in Google Sheet"):
-            update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10, handle_two_outputs=False)
-            st.success("Recommendations data updated successfully.")
+# Process Recommendations data
+if recommendations_file is not None:
+    df_recommendations = pd.read_excel(recommendations_file)
+    st.write("Recommendations data preview:", df_recommendations.head())
+    
+    rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
+    st.write(f"Recommendations Count: {rec_count.to_dict()}")
+    st.write(f"Recommendations Sold Count: {rec_sold_count.to_dict()}")
+    st.write(f"Recommendations Amount: {rec_amount.to_dict()}")
+    st.write(f"Recommendations Sold Amount: {rec_sold_amount.to_dict()}")
+    
+    if st.button("Update Recommendations in Google Sheet"):
+        update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=12)
+        st.success("Recommendations data updated successfully.")
+
 
 if __name__ == "__main__":
     main()
