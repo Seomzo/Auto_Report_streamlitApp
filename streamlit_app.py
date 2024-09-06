@@ -342,79 +342,60 @@ def main():
         st.error("Failed to connect to the Google Sheet. Please check the inputs and try again.")
         return
 
-    # Process Menu Sales data
-    if menu_sales_file is not None:
-        df_menu_sales = pd.read_excel(menu_sales_file)
-        st.write("Menu Sales data preview:", df_menu_sales.head())
-        
-        menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
-        st.write(f"Menu Name counts: {menu_name_counts.to_dict()}")
-        st.write(f"Menu Labor Gross Sums: {menu_labor_gross_sums.to_dict()}")
-        st.write(f"Menu Parts Gross Sums: {menu_parts_gross_sums.to_dict()}")
-        
-        if st.button("Update Menu Sales in Google Sheet"):
+    # Create columns for buttons to align them horizontally
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        if menu_sales_file is not None:
+            df_menu_sales = pd.read_excel(menu_sales_file)
+            # Process Menu Sales data (preview removed)
+            menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
+            
+            if st.button("Update Menu Sales"):
+                update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, date=selected_date, start_row=2)
+                st.success("Menu Sales data updated successfully.")
+
+    with col2:
+        if alacarte_file is not None:
+            df_alacarte = pd.read_excel(alacarte_file)
+            # Process A-La-Carte data (preview removed)
+            alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
+            
+            if st.button("Update A-La-Carte"):
+                update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, date=selected_date, start_row=5)
+                st.success("A-La-Carte data updated successfully.")
+
+    with col3:
+        if commodities_file is not None:
+            df_commodities = pd.read_excel(commodities_file)
+            # Process Commodities data (preview removed)
+            commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Primary Advisor Name")
+            
+            if st.button("Update Commodities"):
+                update_google_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, date=selected_date, start_row=8, handle_two_outputs=True)
+                st.success("Commodities data updated successfully.")
+
+    with col4:
+        if recommendations_file is not None:
+            df_recommendations = pd.read_excel(recommendations_file)
+            # Process Recommendations data (preview removed)
+            rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
+            
+            if st.button("Update Recommendations"):
+                update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10)
+                st.success("Recommendations data updated successfully.")
+
+    # Add an "Input All" button below the row of buttons
+    if st.button("Input All"):
+        if menu_sales_file is not None:
             update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, date=selected_date, start_row=2)
-            st.success("Menu Sales data updated successfully.")
-
-    # Process A-La-Carte data
-    if alacarte_file is not None:
-        df_alacarte = pd.read_excel(alacarte_file)
-        st.write("A-La-Carte data preview:", df_alacarte.head())
-        
-        alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
-        st.write(f"A-La-Carte Name counts: {alacarte_name_counts.to_dict()}")
-        st.write(f"A-La-Carte Labor Gross Sums: {alacarte_labor_gross_sums.to_dict()}")
-        st.write(f"A-La-Carte Parts Gross Sums: {alacarte_parts_gross_sums.to_dict()}")
-        
-        if st.button("Update A-La-Carte in Google Sheet"):
+        if alacarte_file is not None:
             update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, date=selected_date, start_row=5)
-            st.success("A-La-Carte data updated successfully.")
-
-    # Process Commodities data
-    if commodities_file is not None:
-        df_commodities = pd.read_excel(commodities_file)
-        st.write("Commodities data preview:", df_commodities.head())
-        
-        commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Primary Advisor Name")
-        if commodities_name_counts.empty and commodities_parts_gross_sums.empty:
-            return  # Return early if columns were not found
-
-        st.write(f"Commodities Parts Gross Sums: {commodities_parts_gross_sums.to_dict()}")
-        
-        if st.button("Update Commodities in Google Sheet"):
-            update_google_sheet(
-                sheet, 
-                commodities_name_counts, 
-                commodities_parts_gross_sums, 
-                date=selected_date, 
-                start_row=8, 
-                handle_two_outputs=True
-            )
-            st.success("Commodities data updated successfully.")
-
-    # Process Recommendations data
-    if recommendations_file is not None:
-        df_recommendations = pd.read_excel(recommendations_file)
-        st.write("Recommendations data preview:", df_recommendations.head())
-        
-        # Process Recommendations data using the correct column name
-        rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
-        st.write(f"Recommendations Count: {rec_count.to_dict()}")
-        st.write(f"Recommendations Sold Count: {rec_sold_count.to_dict()}")
-        st.write(f"Recommendations Amount: {rec_amount.to_dict()}")
-        st.write(f"Recommendations Sold Amount: {rec_sold_amount.to_dict()}")
-        
-        if st.button("Update Recommendations in Google Sheet"):
-            update_google_sheet(
-                sheet, 
-                rec_count, 
-                rec_sold_count, 
-                rec_amount, 
-                rec_sold_amount, 
-                date=selected_date, 
-                start_row=10  # Adjust start_row as necessary
-            )
-            st.success("Recommendations data updated successfully.")
+        if commodities_file is not None:
+            update_google_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, date=selected_date, start_row=8, handle_two_outputs=True)
+        if recommendations_file is not None:
+            update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10)
+        st.success("All data updated successfully.")
 
 if __name__ == "__main__":
     main()
