@@ -342,59 +342,64 @@ def main():
         st.error("Failed to connect to the Google Sheet. Please check the inputs and try again.")
         return
 
-    # Create columns for buttons to align them horizontally
+    # Creating horizontal layout for buttons
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         if menu_sales_file is not None:
-            df_menu_sales = pd.read_excel(menu_sales_file)
-            # Process Menu Sales data (preview removed)
-            menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
-            
-            if st.button("Update Menu Sales"):
+            if st.button("Update Menu Sales in Google Sheet"):
+                df_menu_sales = pd.read_excel(menu_sales_file)
+                menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
                 update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, date=selected_date, start_row=2)
                 st.success("Menu Sales data updated successfully.")
 
     with col2:
         if alacarte_file is not None:
-            df_alacarte = pd.read_excel(alacarte_file)
-            # Process A-La-Carte data (preview removed)
-            alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
-            
-            if st.button("Update A-La-Carte"):
+            if st.button("Update A-La-Carte in Google Sheet"):
+                df_alacarte = pd.read_excel(alacarte_file)
+                alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
                 update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, date=selected_date, start_row=5)
                 st.success("A-La-Carte data updated successfully.")
 
     with col3:
         if commodities_file is not None:
-            df_commodities = pd.read_excel(commodities_file)
-            # Process Commodities data (preview removed)
-            commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Primary Advisor Name")
-            
-            if st.button("Update Commodities"):
+            if st.button("Update Commodities in Google Sheet"):
+                df_commodities = pd.read_excel(commodities_file)
+                commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Primary Advisor Name")
                 update_google_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, date=selected_date, start_row=8, handle_two_outputs=True)
                 st.success("Commodities data updated successfully.")
 
     with col4:
         if recommendations_file is not None:
-            df_recommendations = pd.read_excel(recommendations_file)
-            # Process Recommendations data (preview removed)
-            rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
-            
-            if st.button("Update Recommendations"):
+            if st.button("Update Recommendations in Google Sheet"):
+                df_recommendations = pd.read_excel(recommendations_file)
+                rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
                 update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10)
                 st.success("Recommendations data updated successfully.")
 
-    # Add an "Input All" button below the row of buttons
+    # Adding the 'Input All' button
     if st.button("Input All"):
+        # Process all files if they are uploaded
         if menu_sales_file is not None:
+            df_menu_sales = pd.read_excel(menu_sales_file)
+            menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
             update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, date=selected_date, start_row=2)
+        
         if alacarte_file is not None:
+            df_alacarte = pd.read_excel(alacarte_file)
+            alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
             update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, date=selected_date, start_row=5)
+
         if commodities_file is not None:
+            df_commodities = pd.read_excel(commodities_file)
+            commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Primary Advisor Name")
             update_google_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, date=selected_date, start_row=8, handle_two_outputs=True)
+
         if recommendations_file is not None:
+            df_recommendations = pd.read_excel(recommendations_file)
+            rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
             update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10)
+        
         st.success("All data updated successfully.")
 
 if __name__ == "__main__":
