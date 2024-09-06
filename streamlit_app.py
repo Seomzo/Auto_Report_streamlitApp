@@ -117,7 +117,7 @@ def process_alacarte_data(df, names_column):
     return name_counts, labor_gross_sums, parts_gross_sums
 
 def process_commodities_data(df, names_column="Primary Advisor Name"):
-    #st.write("Available columns in Commodities data:", df.columns.tolist())
+    st.write("Available columns in Commodities data:", df.columns.tolist())
     df.columns = df.columns.str.strip()
     if names_column not in df.columns:
         st.error(f"Column '{names_column}' not found in the uploaded Commodities Excel. Please check the column names.")
@@ -134,7 +134,7 @@ def process_commodities_data(df, names_column="Primary Advisor Name"):
 
 def process_recommendations_data(df, names_column="Name"):
     # Display available columns for debugging
-    #st.write("Available columns in Recommendations data:", df.columns.tolist())
+    st.write("Available columns in Recommendations data:", df.columns.tolist())
     
     # Ensure no leading/trailing spaces in column names
     df.columns = df.columns.str.strip()
