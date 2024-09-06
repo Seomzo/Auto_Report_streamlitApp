@@ -220,7 +220,7 @@ def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_o
                     
                     # Update Rec Sold Amount
                     sheet.update_cell(row_index + 3, date_column_index, rec_sold_amount)
-                
+
                 # Apply black text formatting to updated cells
                 black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
                 for i in range(len(args) + 1):  # +1 for the name count update
@@ -231,6 +231,7 @@ def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_o
             st.error(f"Error updating cell for {advisor_name}: {e}")
         except Exception as e:
             st.error(f"An error occurred: {e}")
+
 
 
 def main():
