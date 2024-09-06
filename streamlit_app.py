@@ -166,8 +166,67 @@ def process_recommendations_data(df, names_column="Name"):
     return rec_count, rec_sold_count, rec_amount, rec_sold_amount
 
 
-
 def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False):
+    headers = sheet.row_values(2)  # Assuming the date is in row 2
+    if date in headers:
+        date_column_index = headers.index(date) + 1
+    else:
+        st.error(f"Date {date} not found in the sheet.")
+        return
+    
+    sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]  # Adjust if advisors are in a different column
+    
+    for advisor_name in name_counts.index:
+        try:
+            if advisor_name in sheet_advisor_names:
+                row_index = sheet_advisor_names.index(advisor_name) + start_row  # Find the row for the advisor
+                
+                # Update Count
+                sheet.update_cell(row_index, date_column_index, int(name_counts[advisor_name]))
+                
+                # Handle specific numbers of outputs based on dataset type
+                if handle_two_outputs:
+                    # For Commodities: Only update Parts Gross (2 outputs, name count and parts gross)
+                    parts_gross = float(args[0].get(advisor_name, 0))
+                    sheet.update_cell(row_index + 1, date_column_index, parts_gross)
+                    
+                elif len(args) == 2:
+                    # For Menu Sales and A-La-Carte (3 outputs, name count, labor gross, parts gross)
+                    labor_gross = float(args[0].get(advisor_name, 0))
+                    parts_gross = float(args[1].get(advisor_name, 0))
+                    
+                    # Update Labor Gross
+                    sheet.update_cell(row_index + 1, date_column_index, labor_gross)
+                    
+                    # Update Parts Gross
+                    sheet.update_cell(row_index + 2, date_column_index, parts_gross)
+
+                elif len(args) == 3:
+                    # For Recommendations (4 outputs, rec count, rec sold count, rec amount, rec sold amount)
+                    rec_sold_count = float(args[0].get(advisor_name, 0))
+                    rec_amount = float(args[1].get(advisor_name, 0))
+                    rec_sold_amount = float(args[2].get(advisor_name, 0))
+
+                    # Update Rec Sold Count
+                    sheet.update_cell(row_index + 1, date_column_index, rec_sold_count)
+                    
+                    # Update Rec Amount
+                    sheet.update_cell(row_index + 2, date_column_index, rec_amount)
+                    
+                    # Update Rec Sold Amount
+                    sheet.update_cell(row_index + 3, date_column_index, rec_sold_amount)
+
+                # Apply black text formatting to updated cells
+                black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
+                for i in range(len(args) + 1):  # +1 for the name count update
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + i, date_column_index)}", black_format)
+            else:
+                st.warning(f"{advisor_name} not found in the Google Sheet.")
+        except gspread.exceptions.APIError as e:
+            st.error(f"Error updating cell for {advisor_name}: {e}")
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
+
     headers = sheet.row_values(2)  # Assuming the date is in row 2
     if date in headers:
         date_column_index = headers.index(date) + 1
