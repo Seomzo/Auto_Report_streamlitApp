@@ -142,8 +142,6 @@ def process_recommendations_data(df, names_column="Name"):
     # Filter out rows where the advisor name is "Total"
     df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
     
-    # Filter in rows where Pay Type is "All"
-    df = df[df['Pay Type'].str.strip().str.upper() == "ALL"]
 
     # Check if the required column exists
     if names_column not in df.columns:
