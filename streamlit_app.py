@@ -179,6 +179,9 @@ def process_daily_data(df, names_column="Name"):
     # Filter out rows where the advisor name is "Total"
     df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
 
+    # Filter rows where Pay Type is "All"
+    df = df[df['Pay Type'].str.strip().str.upper() == "ALL"]
+
     # Clean data
     df['Labor Gross'] = clean_column_data(df['Labor Gross'])
     df['Parts Gross'] = clean_column_data(df['Parts Gross'])
@@ -408,7 +411,7 @@ def main():
         if daily_data_file is not None:
             if st.button("Update Daily Data in Google Sheet"):
                 df_daily = pd.read_excel(daily_data_file)
-                daily_labor_gross_sums, daily_parts_gross_sums = process_daily_data(df_daily, "Advisor Name")
+                daily_labor_gross_sums, daily_parts_gross_sums = process_daily_data(df_daily, "Name")
                 update_google_sheet(sheet, daily_labor_gross_sums, daily_parts_gross_sums, date=selected_date, start_row=14)  # Adjust start_row as necessary
                 st.success("Daily data updated successfully.")
 
@@ -437,7 +440,7 @@ def main():
 
         if daily_data_file is not None:
             df_daily = pd.read_excel(daily_data_file)
-            daily_labor_gross_sums, daily_parts_gross_sums = process_daily_data(df_daily, "Advisor Name")
+            daily_labor_gross_sums, daily_parts_gross_sums = process_daily_data(df_daily, "Name")
             update_google_sheet(sheet, daily_labor_gross_sums, daily_parts_gross_sums, date=selected_date, start_row=14)  # Adjust start_row as necessary
         
         st.success("All data updated successfully.")
