@@ -169,29 +169,24 @@ def process_recommendations_data(df, names_column="Name"):
     return rec_count, rec_sold_count, rec_amount, rec_sold_amount
 
 def process_daily_data(df, names_column="Name"):
-    """Process daily data to extract Labor Gross and Parts Gross for each advisor."""
+    """Process daily data to extract summed 'Labor Gross' and 'Parts Gross' for each advisor."""
 
-    # Normalize advisor names
-    df[names_column] = df[names_column].str.strip().str.upper()
-     # Ensure no leading/trailing spaces in column names
+    # Ensure no leading/trailing spaces in column names and normalize advisor names
     df.columns = df.columns.str.strip()
-    
-    # Filter out rows where the advisor name is "Total"
-    df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
+    df[names_column] = df[names_column].str.strip().str.upper()
 
-    # Filter rows where Pay Type is "All"
-    df = df[df['Pay Type'].str.strip().str.upper() == "ALL"]
+    # Filter out rows where the advisor name is "Total" and filter rows where 'Pay Type' is 'All'
+    df = df[(df[names_column].str.upper() != "TOTAL") & (df['Pay Type'].str.upper() == "ALL")]
 
-    # Clean data
+    # Clean data in 'Labor Gross' and 'Parts Gross' columns
     df['Labor Gross'] = clean_column_data(df['Labor Gross'])
     df['Parts Gross'] = clean_column_data(df['Parts Gross'])
-    
-    # Calculate sums
-    labor_gross_sums = df.groupby(names_column)['Labor Gross'].sum()
-    parts_gross_sums = df.groupby(names_column)['Parts Gross'].sum()
-    
-    return labor_gross_sums, parts_gross_sums
 
+    # Extract sums directly from the 'All' rows for each advisor
+    labor_gross_sums = df.set_index(names_column)['Labor Gross']
+    parts_gross_sums = df.set_index(names_column)['Parts Gross']
+
+    return labor_gross_sums, parts_gross_sums
 
 
 def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False):
@@ -374,7 +369,8 @@ def main():
 
     # Creating horizontal layout for buttons
     col1, col2, col3, col4, col5= st.columns(5)
-
+   
+    # Process and update data
     with col1:
         if menu_sales_file is not None:
             if st.button("Update Menu Sales in Google Sheet"):
@@ -415,6 +411,7 @@ def main():
                 update_google_sheet(sheet, daily_labor_gross_sums, daily_parts_gross_sums, date=selected_date, start_row=14)  # Adjust start_row as necessary
                 st.success("Daily data updated successfully.")
 
+
     # Adding the 'Input All' button
     if st.button("Input All"):
         # Process all files if they are uploaded
@@ -442,8 +439,7 @@ def main():
             df_daily = pd.read_excel(daily_data_file)
             daily_labor_gross_sums, daily_parts_gross_sums = process_daily_data(df_daily, "Name")
             update_google_sheet(sheet, daily_labor_gross_sums, daily_parts_gross_sums, date=selected_date, start_row=14)  # Adjust start_row as necessary
-        
-        st.success("All data updated successfully.")
+            st.success("All data updated successfully.")
 
 if __name__ == "__main__":
     main()
