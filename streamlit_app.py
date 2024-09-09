@@ -165,6 +165,22 @@ def process_recommendations_data(df, names_column="Name"):
     
     return rec_count, rec_sold_count, rec_amount, rec_sold_amount
 
+def process_daily_data(df, names_column="Advisor Name"):
+    """Process daily data to extract Labor Gross and Parts Gross for each advisor."""
+    # Normalize advisor names
+    df[names_column] = df[names_column].str.strip().str.upper()
+    
+    # Clean data
+    df['Labor Gross'] = clean_column_data(df['Labor Gross'])
+    df['Parts Gross'] = clean_column_data(df['Parts Gross'])
+    
+    # Calculate sums
+    labor_gross_sums = df.groupby(names_column)['Labor Gross'].sum()
+    parts_gross_sums = df.groupby(names_column)['Parts Gross'].sum()
+    
+    return labor_gross_sums, parts_gross_sums
+
+
 
 def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False):
     headers = sheet.row_values(2)  # Assuming the date is in row 2
@@ -333,6 +349,7 @@ def main():
     alacarte_file = st.file_uploader("Upload A-La-Carte Excel", type=["xlsx"])
     commodities_file = st.file_uploader("Upload Commodities Excel", type=["xlsx"])
     recommendations_file = st.file_uploader("Upload Recommendations Excel", type=["xlsx"])
+    daily_data_file = st.file_uploader("Upload Daily Data Excel", type=["xlsx"])
 
     # Date input with default to today's date
     selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d')
@@ -344,7 +361,7 @@ def main():
         return
 
     # Creating horizontal layout for buttons
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5= st.columns(5)
 
     with col1:
         if menu_sales_file is not None:
@@ -378,6 +395,14 @@ def main():
                 update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10)
                 st.success("Recommendations data updated successfully.")
 
+    with col5:
+        if daily_data_file is not None:
+            if st.button("Update Daily Data in Google Sheet"):
+                df_daily = pd.read_excel(daily_data_file)
+                daily_labor_gross_sums, daily_parts_gross_sums = process_daily_data(df_daily, "Advisor Name")
+                update_google_sheet(sheet, daily_labor_gross_sums, daily_parts_gross_sums, date=selected_date, start_row=14)  # Adjust start_row as necessary
+                st.success("Daily data updated successfully.")
+
     # Adding the 'Input All' button
     if st.button("Input All"):
         # Process all files if they are uploaded
@@ -400,6 +425,11 @@ def main():
             df_recommendations = pd.read_excel(recommendations_file)
             rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
             update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10)
+
+        if daily_data_file is not None:
+            df_daily = pd.read_excel(daily_data_file)
+            daily_labor_gross_sums, daily_parts_gross_sums = process_daily_data(df_daily, "Advisor Name")
+            update_google_sheet(sheet, daily_labor_gross_sums, daily_parts_gross_sums, date=selected_date, start_row=14)  # Adjust start_row as necessary
         
         st.success("All data updated successfully.")
 
