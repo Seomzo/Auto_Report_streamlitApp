@@ -142,7 +142,6 @@ def process_recommendations_data(df, names_column="Name"):
     # Filter out rows where the advisor name is "Total"
     df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
     
-
     # Check if the required column exists
     if names_column not in df.columns:
         st.error(f"Column '{names_column}' not found in the uploaded Recommendations Excel. Please check the column names.")
@@ -166,85 +165,160 @@ def process_recommendations_data(df, names_column="Name"):
     
     return rec_count, rec_sold_count, rec_amount, rec_sold_amount
 
-def process_daily_data(df, names_column="Name"):
-    """Process daily data to extract summed 'Labor Gross' and 'Parts Gross' for each advisor."""
+# def process_daily_data(df, names_column="Name"):
+#     # Display available columns for debugging
+#     #st.write("Available columns in Recommendations data:", df.columns.tolist())
+    
+#     # Ensure no leading/trailing spaces in column names
+#     df.columns = df.columns.str.strip()
+    
+#     # Filter out rows where the advisor name is "Total"
+#     df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
+    
+#     # filter in rows where the pay type is "ALL"
+#     df = df[(df[names_column].str.upper() != "TOTAL") & (df['Pay Type'].str.upper() == "ALL")]
 
-    # Ensure no leading/trailing spaces in column names and normalize advisor names
-    df.columns = df.columns.str.strip()
-    df[names_column] = df[names_column].str.strip().str.upper()
+#     # Check if the required column exists
+#     if names_column not in df.columns:
+#         st.error(f"Column '{names_column}' not found in the uploaded Daily Excel. Please check the column names.")
+#         return pd.Series(dtype='int'), pd.Series(dtype='int'), pd.Series(dtype='float'), pd.Series(dtype='float')  # Return empty Series if column not found
 
-    # Filter out rows where the advisor name is "Total" and filter rows where 'Pay Type' is 'All'
-    df = df[(df[names_column].str.upper() != "TOTAL") & (df['Pay Type'].str.upper() == "ALL")]
-
-    # Clean data in 'Labor Gross' and 'Parts Gross' columns
-    df['Labor Gross'] = clean_column_data(df['Labor Gross'])
-    df['Parts Gross'] = clean_column_data(df['Parts Gross'])
-
-    # Extract sums directly from the 'All' rows for each advisor
-    labor_gross_sums = df.set_index(names_column)['Labor Gross']
-    parts_gross_sums = df.set_index(names_column)['Parts Gross']
-
-    return labor_gross_sums, parts_gross_sums
+#     # Normalize the advisor names
+#     df[names_column] = df[names_column].str.strip().str.upper()  # Normalize to uppercase and strip spaces
+    
+#     ### Ensure the necessary columns exist
+#     required_columns = ['Rec', 'Recommendations Sold', 'Recommendations $ amount', 'Recommendations Sold $ amount']
+#     for col in required_columns:
+#         if col not in df.columns:
+#             st.error(f"Column '{col}' not found in the uploaded Recommendations Excel. Please check the column names.")
+#             return pd.Series(dtype='int'), pd.Series(dtype='int'), pd.Series(dtype='float'), pd.Series(dtype='float')
+    
+#     # Clean and process data
+#     rec_count = df.groupby(names_column)['Recommendations'].sum()
+#     rec_sold_count = df.groupby(names_column)['Recommendations Sold'].sum()
+#     rec_amount = clean_column_data(df.groupby(names_column)['Recommendations $ amount'].sum())
+#     rec_sold_amount = clean_column_data(df.groupby(names_column)['Recommendations Sold $ amount'].sum())
+    
+#     return rec_count, rec_sold_count, rec_amount, rec_sold_amount
 
 def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False):
     headers = sheet.row_values(2)  # Assuming the date is in row 2
-    date = date.lstrip('0')  # Normalize the date format
+    date = date.lstrip('0')
     if date in headers:
         date_column_index = headers.index(date) + 1
     else:
         st.error(f"Date {date} not found in the sheet.")
         return
     
-    sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]  # Get the list of advisor names from column 1
+    sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]  # Adjust if advisors are in a different column
     
     for advisor_name in name_counts.index:
         try:
             if advisor_name in sheet_advisor_names:
-                row_index = sheet_advisor_names.index(advisor_name) + start_row  # Correctly find the starting row
+                row_index = sheet_advisor_names.index(advisor_name) + start_row  # Find the row for the advisor
                 
                 # Update Count
-                sheet.update_cell(row_index, date_column_index, float(name_counts[advisor_name]))
+                sheet.update_cell(row_index, date_column_index, int(name_counts[advisor_name]))
                 
-                # Determine output handling based on the number of args
-                if handle_two_outputs and len(args) == 1:
-                    # Commodities: Only update Parts Gross (2 outputs: name count and parts gross)
+                # Handle specific numbers of outputs based on dataset type
+                if handle_two_outputs:
+                    # For Commodities: Only update Parts Gross (2 outputs, name count and parts gross)
                     parts_gross = float(args[0].get(advisor_name, 0))
                     sheet.update_cell(row_index + 1, date_column_index, parts_gross)
                     
                 elif len(args) == 2:
-                    # For Daily Data: Update Daily Labor Gross and Daily Parts Gross
-                    labor_gross = float(args[0].get(advisor_name, 0))
-                    parts_gross = float(args[1].get(advisor_name, 0))
-
-                    # Ensure correct rows for Daily Labor Gross and Daily Parts Gross
-                    sheet.update_cell(row_index, date_column_index, labor_gross)
-                    sheet.update_cell(row_index + 1, date_column_index, parts_gross)
-
-                elif len(args) == 3:
-                    # For Menu Sales and A-La-Carte: Update Labor Gross and Parts Gross
+                    # For Menu Sales and A-La-Carte (3 outputs, name count, labor gross, parts gross)
                     labor_gross = float(args[0].get(advisor_name, 0))
                     parts_gross = float(args[1].get(advisor_name, 0))
                     
-                    # Ensure correct rows for Labor Gross and Parts Gross
+                    # Update Labor Gross
                     sheet.update_cell(row_index + 1, date_column_index, labor_gross)
+                    
+                    # Update Parts Gross
                     sheet.update_cell(row_index + 2, date_column_index, parts_gross)
 
-                elif len(args) == 4:
-                    # For Recommendations: Update Rec Count, Rec Sold Count, Rec Amount, Rec Sold Amount
+                elif len(args) == 3:
+                    # For Recommendations (4 outputs, rec count, rec sold count, rec amount, rec sold amount)
+                    rec_sold_count = float(args[0].get(advisor_name, 0))
+                    rec_amount = float(args[1].get(advisor_name, 0))
+                    rec_sold_amount = float(args[2].get(advisor_name, 0))
+
+                    # Update Rec Sold Count
+                    sheet.update_cell(row_index + 1, date_column_index, rec_sold_count)
+                    
+                    # Update Rec Amount
+                    sheet.update_cell(row_index + 2, date_column_index, rec_amount)
+                    
+                    # Update Rec Sold Amount
+                    sheet.update_cell(row_index + 3, date_column_index, rec_sold_amount)
+
+                # Apply black text formatting to updated cells
+                black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
+                for i in range(len(args) + 1):  # +1 for the name count update
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + i, date_column_index)}", black_format)
+            else:
+                st.warning(f"{advisor_name} not found in the Google Sheet.")
+        except gspread.exceptions.APIError as e:
+            st.error(f"Error updating cell for {advisor_name}: {e}")
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
+
+    headers = sheet.row_values(2)  # Assuming the date is in row 2
+    if date in headers:
+        date_column_index = headers.index(date) + 1
+    else:
+        st.error(f"Date {date} not found in the sheet.")
+        return
+    
+    sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]  # Adjust if advisors are in a different column
+    
+    for advisor_name in name_counts.index:
+        try:
+            if advisor_name in sheet_advisor_names:
+                row_index = sheet_advisor_names.index(advisor_name) + start_row  # Find the row for the advisor
+                
+                # Update Count
+                sheet.update_cell(row_index, date_column_index, int(name_counts[advisor_name]))
+                
+                # Handle specific numbers of outputs based on dataset type
+                if handle_two_outputs and len(args) == 1:
+                    # For Commodities: Only update Parts Gross (2 outputs, name count and parts gross)
+                    parts_gross = float(args[0].get(advisor_name, 0))
+                    sheet.update_cell(row_index + 1, date_column_index, parts_gross)
+                    
+                elif len(args) == 2:
+                    # For Menu Sales and A-La-Carte (3 outputs, name count, labor gross, parts gross)
+                    labor_gross = float(args[0].get(advisor_name, 0))
+                    parts_gross = float(args[1].get(advisor_name, 0))
+                    
+                    # Update Labor Gross
+                    sheet.update_cell(row_index + 1, date_column_index, labor_gross)
+                    
+                    # Update Parts Gross
+                    sheet.update_cell(row_index + 2, date_column_index, parts_gross)
+
+                elif len(args) == 4:  # Adjusted to 4 outputs for Recommendations
+                    # For Recommendations (4 outputs: rec count, rec sold count, rec amount, rec sold amount)
                     rec_count = float(args[0].get(advisor_name, 0))
                     rec_sold_count = float(args[1].get(advisor_name, 0))
                     rec_amount = float(args[2].get(advisor_name, 0))
                     rec_sold_amount = float(args[3].get(advisor_name, 0))
 
-                    # Ensure correct rows for Recommendations
+                    # Update Rec Count
                     sheet.update_cell(row_index, date_column_index, rec_count)
+                    
+                    # Update Rec Sold Count
                     sheet.update_cell(row_index + 1, date_column_index, rec_sold_count)
+                    
+                    # Update Rec Amount
                     sheet.update_cell(row_index + 2, date_column_index, rec_amount)
+                    
+                    # Update Rec Sold Amount
                     sheet.update_cell(row_index + 3, date_column_index, rec_sold_amount)
                 
-                # Apply black text formatting to all updated cells to ensure visibility
+                # Apply black text formatting to updated cells
                 black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
-                for i in range(len(args) + 1):  # Adjust range to include all necessary updates
+                for i in range(len(args) + 1):  # +1 for the name count update
                     format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + i, date_column_index)}", black_format)
             else:
                 st.warning(f"{advisor_name} not found in the Google Sheet.")
@@ -294,7 +368,6 @@ def main():
     alacarte_file = st.file_uploader("Upload A-La-Carte Excel", type=["xlsx"])
     commodities_file = st.file_uploader("Upload Commodities Excel", type=["xlsx"])
     recommendations_file = st.file_uploader("Upload Recommendations Excel", type=["xlsx"])
-    daily_data_file = st.file_uploader("Upload Daily Data Excel", type=["xlsx"])
 
     # Date input with default to today's date
     selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d')
@@ -306,16 +379,14 @@ def main():
         return
 
     # Creating horizontal layout for buttons
-    col1, col2, col3, col4, col5= st.columns(5)
-   
-    # Process and update data
-    # Process and update data
+    col1, col2, col3, col4 = st.columns(4)
+
     with col1:
         if menu_sales_file is not None:
             if st.button("Update Menu Sales in Google Sheet"):
                 df_menu_sales = pd.read_excel(menu_sales_file)
                 menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
-                update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, date=selected_date, start_row=2)  # Adjust as needed
+                update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, date=selected_date, start_row=2)
                 st.success("Menu Sales data updated successfully.")
 
     with col2:
@@ -323,7 +394,7 @@ def main():
             if st.button("Update A-La-Carte in Google Sheet"):
                 df_alacarte = pd.read_excel(alacarte_file)
                 alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
-                update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, date=selected_date, start_row=5)  # Adjust as needed
+                update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, date=selected_date, start_row=5)
                 st.success("A-La-Carte data updated successfully.")
 
     with col3:
@@ -331,7 +402,7 @@ def main():
             if st.button("Update Commodities in Google Sheet"):
                 df_commodities = pd.read_excel(commodities_file)
                 commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Primary Advisor Name")
-                update_google_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, date=selected_date, start_row=8, handle_two_outputs=True)  # Adjust as needed
+                update_google_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, date=selected_date, start_row=8, handle_two_outputs=True)
                 st.success("Commodities data updated successfully.")
 
     with col4:
@@ -339,17 +410,8 @@ def main():
             if st.button("Update Recommendations in Google Sheet"):
                 df_recommendations = pd.read_excel(recommendations_file)
                 rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
-                update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10)  # Adjust as needed
+                update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10)
                 st.success("Recommendations data updated successfully.")
-
-    with col5:
-        if daily_data_file is not None:
-            if st.button("Update Daily Data in Google Sheet"):
-                df_daily = pd.read_excel(daily_data_file)
-                daily_labor_gross_sums, daily_parts_gross_sums = process_daily_data(df_daily, "Name")
-                update_google_sheet(sheet, daily_labor_gross_sums, daily_parts_gross_sums, date=selected_date, start_row=14)  # Adjust as needed
-                st.success("Daily data updated successfully.")
-
 
     # Adding the 'Input All' button
     if st.button("Input All"):
@@ -373,12 +435,8 @@ def main():
             df_recommendations = pd.read_excel(recommendations_file)
             rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
             update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10)
-
-        if daily_data_file is not None:
-            df_daily = pd.read_excel(daily_data_file)
-            daily_labor_gross_sums, daily_parts_gross_sums = process_daily_data(df_daily, "Name")
-            update_google_sheet(sheet, daily_labor_gross_sums, daily_parts_gross_sums, date=selected_date, start_row=14)  # Adjust start_row as necessary
-            st.success("All data updated successfully.")
+        
+        st.success("All data updated successfully.")
 
 if __name__ == "__main__":
     main()
