@@ -188,7 +188,7 @@ def process_daily_data(df, names_column="Name"):
 
 def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False):
     headers = sheet.row_values(2)  # Assuming the date is in row 2
-    date = date.lstrip('2')  # Normalize the date format
+    date = date.lstrip('0')  # Normalize the date format
     if date in headers:
         date_column_index = headers.index(date) + 1
     else:
