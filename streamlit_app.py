@@ -142,6 +142,9 @@ def process_recommendations_data(df, names_column="Name"):
     # Filter out rows where the advisor name is "Total"
     df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
     
+    # Filter in rows where Pay Type is "All"
+    df = df[df['Pay Type'].str.strip().str.upper() == "ALL"]
+
     # Check if the required column exists
     if names_column not in df.columns:
         st.error(f"Column '{names_column}' not found in the uploaded Recommendations Excel. Please check the column names.")
@@ -165,11 +168,17 @@ def process_recommendations_data(df, names_column="Name"):
     
     return rec_count, rec_sold_count, rec_amount, rec_sold_amount
 
-def process_daily_data(df, names_column="Advisor Name"):
+def process_daily_data(df, names_column="Name"):
     """Process daily data to extract Labor Gross and Parts Gross for each advisor."""
+
     # Normalize advisor names
     df[names_column] = df[names_column].str.strip().str.upper()
+     # Ensure no leading/trailing spaces in column names
+    df.columns = df.columns.str.strip()
     
+    # Filter out rows where the advisor name is "Total"
+    df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
+
     # Clean data
     df['Labor Gross'] = clean_column_data(df['Labor Gross'])
     df['Parts Gross'] = clean_column_data(df['Parts Gross'])
