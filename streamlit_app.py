@@ -205,45 +205,42 @@ def process_daily_data(df, names_column="Name"):
 
 
 
-def update_google_sheet(sheet, name_counts, *args, date, start_row):
-    # Find the correct column for the date
+def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False):
     headers = sheet.row_values(2)  # Assuming the date is in row 2
-    date = date.lstrip('0')  # Normalize date by removing leading zeros
+    date = date.lstrip('0')
     if date in headers:
         date_column_index = headers.index(date) + 1
     else:
         st.error(f"Date {date} not found in the sheet.")
         return
     
-    # Get all advisor names from the sheet and normalize them
     sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]  # Adjust if advisors are in a different column
     
-    # Generic update function for cells
-    def update_cell(sheet, row, col, value):
+    for advisor_name in name_counts.index:
         try:
-            sheet.update_cell(row, col, value)
-            # Apply black text formatting to the updated cell
-            black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
-            format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row, col)}", black_format)
+            if advisor_name in sheet_advisor_names:
+                row_index = sheet_advisor_names.index(advisor_name) + start_row  # Find the row for the advisor
+                
+                # Update Count
+                count_value = int(name_counts[advisor_name]) if not pd.isna(name_counts[advisor_name]) else 0
+                sheet.update_cell(row_index, date_column_index, count_value)
+                
+                # Handle specific numbers of outputs based on dataset type
+                for i, arg in enumerate(args):
+                    value = float(arg.get(advisor_name, 0)) if not pd.isna(arg.get(advisor_name, 0)) else 0.0
+                    sheet.update_cell(row_index + i + 1, date_column_index, value)
+                
+                # Apply black text formatting to updated cells
+                black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
+                for i in range(len(args) + 1):  # +1 for the name count update
+                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + i, date_column_index)}", black_format)
+            else:
+                st.warning(f"{advisor_name} not found in the Google Sheet.")
         except gspread.exceptions.APIError as e:
-            st.error(f"Error updating cell for row {row}, column {col}: {e}")
+            st.error(f"Error updating cell for {advisor_name}: {e}")
         except Exception as e:
             st.error(f"An error occurred: {e}")
 
-    # Update data for each advisor
-    for advisor_name in name_counts.index:
-        if advisor_name in sheet_advisor_names:
-            row_index = sheet_advisor_names.index(advisor_name) + start_row  # Find the row for the advisor
-            
-            # Update the name count
-            update_cell(sheet, row_index, date_column_index, int(name_counts[advisor_name]))
-
-            # Update the outputs based on the length of args
-            for i, data in enumerate(args):
-                value = data.get(advisor_name, 0)
-                update_cell(sheet, row_index + i + 1, date_column_index, value)  # +1 because the first row is for counts
-        else:
-            st.warning(f"{advisor_name} not found in the Google Sheet.")
 
 def main():
     set_bg_color()
