@@ -196,9 +196,9 @@ def process_daily_data(df, names_column="Name"):
     labor_gross_sums = df.groupby(names_column)['Labor Gross'].sum()  # Sum to check for any duplicates
     parts_gross_sums = df.groupby(names_column)['Parts Gross'].sum()
 
-    # Debug: Print the processed values
-    st.write("Processed Labor Gross Sums:", labor_gross_sums)
-    st.write("Processed Parts Gross Sums:", parts_gross_sums)
+    # # Debug: Print the processed values
+    # st.write("Processed Labor Gross Sums:", labor_gross_sums)
+    # st.write("Processed Parts Gross Sums:", parts_gross_sums)
 
     return labor_gross_sums, parts_gross_sums
 
