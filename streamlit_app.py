@@ -165,41 +165,32 @@ def process_recommendations_data(df, names_column="Name"):
     
     return rec_count, rec_sold_count, rec_amount, rec_sold_amount
 
-# def process_daily_data(df, names_column="Name"):
-#     # Display available columns for debugging
-#     #st.write("Available columns in Recommendations data:", df.columns.tolist())
+def process_daily_data(df, names_column="Name"):
+    # Ensure no leading/trailing spaces in column names
+    df.columns = df.columns.str.strip()
     
-#     # Ensure no leading/trailing spaces in column names
-#     df.columns = df.columns.str.strip()
+    # Filter out rows where the advisor name is "Total"
+    df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
     
-#     # Filter out rows where the advisor name is "Total"
-#     df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
-    
-#     # filter in rows where the pay type is "ALL"
-#     df = df[(df[names_column].str.upper() != "TOTAL") & (df['Pay Type'].str.upper() == "ALL")]
+    # Filter in rows where the pay type is "ALL"
+    df = df[(df['Pay Type'].str.upper() == "ALL")]
 
-#     # Check if the required column exists
-#     if names_column not in df.columns:
-#         st.error(f"Column '{names_column}' not found in the uploaded Daily Excel. Please check the column names.")
-#         return pd.Series(dtype='int'), pd.Series(dtype='int'), pd.Series(dtype='float'), pd.Series(dtype='float')  # Return empty Series if column not found
+    # Normalize the advisor names
+    df[names_column] = df[names_column].str.strip().str.upper()  # Normalize to uppercase and strip spaces
 
-#     # Normalize the advisor names
-#     df[names_column] = df[names_column].str.strip().str.upper()  # Normalize to uppercase and strip spaces
-    
-#     ### Ensure the necessary columns exist
-#     required_columns = ['Rec', 'Recommendations Sold', 'Recommendations $ amount', 'Recommendations Sold $ amount']
-#     for col in required_columns:
-#         if col not in df.columns:
-#             st.error(f"Column '{col}' not found in the uploaded Recommendations Excel. Please check the column names.")
-#             return pd.Series(dtype='int'), pd.Series(dtype='int'), pd.Series(dtype='float'), pd.Series(dtype='float')
-    
-#     # Clean and process data
-#     rec_count = df.groupby(names_column)['Recommendations'].sum()
-#     rec_sold_count = df.groupby(names_column)['Recommendations Sold'].sum()
-#     rec_amount = clean_column_data(df.groupby(names_column)['Recommendations $ amount'].sum())
-#     rec_sold_amount = clean_column_data(df.groupby(names_column)['Recommendations Sold $ amount'].sum())
-    
-#     return rec_count, rec_sold_count, rec_amount, rec_sold_amount
+    # Check for required columns
+    required_columns = ['Labor Gross', 'Parts Gross']
+    for col in required_columns:
+        if col not in df.columns:
+            st.error(f"Column '{col}' not found in the uploaded Daily Data Excel. Please check the column names.")
+            return pd.Series(dtype='float'), pd.Series(dtype='float')
+
+    # Extract Labor Gross and Parts Gross values for each advisor
+    labor_gross_sums = df.groupby(names_column)['Labor Gross'].last()  # Use 'last' to get the last occurrence per advisor
+    parts_gross_sums = df.groupby(names_column)['Parts Gross'].last()
+
+    return labor_gross_sums, parts_gross_sums
+
 
 def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False):
     headers = sheet.row_values(2)  # Assuming the date is in row 2
@@ -368,6 +359,7 @@ def main():
     alacarte_file = st.file_uploader("Upload A-La-Carte Excel", type=["xlsx"])
     commodities_file = st.file_uploader("Upload Commodities Excel", type=["xlsx"])
     recommendations_file = st.file_uploader("Upload Recommendations Excel", type=["xlsx"])
+    daily_data_file = st.file_uploader("Upload Daily Data Excel", type=["xlsx"])  # New file uploader for Daily Data
 
     # Date input with default to today's date
     selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d')
@@ -379,7 +371,7 @@ def main():
         return
 
     # Creating horizontal layout for buttons
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)  # Added col5 for daily data
 
     with col1:
         if menu_sales_file is not None:
@@ -413,6 +405,14 @@ def main():
                 update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10)
                 st.success("Recommendations data updated successfully.")
 
+    with col5:  # New column for daily data
+        if daily_data_file is not None:
+            if st.button("Update Daily Data in Google Sheet"):
+                df_daily_data = pd.read_excel(daily_data_file)
+                daily_labor_gross_sums, daily_parts_gross_sums = process_daily_data(df_daily_data, "Name")
+                update_google_sheet(sheet, daily_labor_gross_sums, daily_parts_gross_sums, date=selected_date, start_row=14)  # Adjust start_row as necessary
+                st.success("Daily data updated successfully.")
+
     # Adding the 'Input All' button
     if st.button("Input All"):
         # Process all files if they are uploaded
@@ -435,7 +435,12 @@ def main():
             df_recommendations = pd.read_excel(recommendations_file)
             rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
             update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10)
-        
+
+        if daily_data_file is not None:
+            df_daily_data = pd.read_excel(daily_data_file)
+            daily_labor_gross_sums, daily_parts_gross_sums = process_daily_data(df_daily_data, "Name")
+            update_google_sheet(sheet, daily_labor_gross_sums, daily_parts_gross_sums, date=selected_date, start_row=14)  # Adjust start_row as necessary
+
         st.success("All data updated successfully.")
 
 if __name__ == "__main__":
