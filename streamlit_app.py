@@ -96,7 +96,10 @@ def connect_to_google_sheet(sheet_name, worksheet_name):
 
 def clean_column_data(column):
     """Clean column data by removing non-numeric characters and converting to float."""
-    return column.replace('[\$,]', '', regex=True).astype(float)
+    # Remove dollar signs, commas, and any spaces
+    column = column.replace('[\$,]', '', regex=True).replace(',', '', regex=True).astype(float)
+    return column
+
 
 def process_menu_sales_data(df, names_column):
     df[names_column] = df[names_column].str.strip().str.upper()
@@ -185,11 +188,16 @@ def process_daily_data(df, names_column="Name"):
             st.error(f"Column '{col}' not found in the uploaded Daily Data Excel. Please check the column names.")
             return pd.Series(dtype='float'), pd.Series(dtype='float')
 
-    # Extract Labor Gross and Parts Gross values for each advisor
+    # Clean and process data
+    df['Labor Gross'] = clean_column_data(df['Labor Gross'])
+    df['Parts Gross'] = clean_column_data(df['Parts Gross'])
+
+    # Extract the last occurrence for each advisor
     labor_gross_sums = df.groupby(names_column)['Labor Gross'].last()  # Use 'last' to get the last occurrence per advisor
     parts_gross_sums = df.groupby(names_column)['Parts Gross'].last()
 
     return labor_gross_sums, parts_gross_sums
+
 
 
 def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False):
