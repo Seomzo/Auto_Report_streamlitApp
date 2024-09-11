@@ -5,6 +5,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from gspread_formatting import CellFormat, format_cell_range
 from datetime import datetime
 import warnings
+import numpy as np
 
 # Suppress UserWarning related to openpyxl's default style
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
@@ -205,9 +206,8 @@ def process_daily_data(df, names_column="Name"):
 
 def batch_update_google_sheet(sheet, updates, date, start_row):
     headers = sheet.row_values(2)  # Assuming the date is in row 2
-    date = date.lstrip('0')
     
-    # Check if the date exists in headers
+    # Make sure to preserve leading zeros if required
     if date in headers:
         date_column_index = headers.index(date) + 1
     else:
@@ -241,6 +241,7 @@ def batch_update_google_sheet(sheet, updates, date, start_row):
         st.error(f"Error updating cells: {e}")
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}")
+
 
 
 def main():
@@ -286,7 +287,7 @@ def main():
     daily_file = st.file_uploader("Upload Daily Data Excel", type=["xlsx"])
 
     # Date input with default to today's date
-    selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d')
+    selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d').zfill(2)  # Use zfill to preserve leading zeros
 
     # Connect to Google Sheet
     sheet = connect_to_google_sheet(sheet_name, worksheet_name)
@@ -334,4 +335,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
