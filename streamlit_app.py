@@ -203,8 +203,6 @@ def process_daily_data(df, names_column="Name"):
     return labor_gross_sums, parts_gross_sums
 
 
-
-
 def batch_update_google_sheet(sheet, updates, date, start_row):
     headers = sheet.row_values(2)  # Assuming the date is in row 2
     date = date.lstrip('0')
@@ -225,8 +223,9 @@ def batch_update_google_sheet(sheet, updates, date, start_row):
         if advisor_name in sheet_advisor_names:
             row_index = sheet_advisor_names.index(advisor_name) + start_row
             
-            # Add cell updates for each value in the update
+            # Convert each value to native Python types before adding to the batch update
             for i, value in enumerate(values):
+                value = float(value) if isinstance(value, (int, float, np.integer, np.floating)) else value
                 cells_to_update.append({
                     'range': gspread.utils.rowcol_to_a1(row_index + i, date_column_index),
                     'values': [[value]]
