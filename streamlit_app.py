@@ -285,7 +285,7 @@ def main():
     daily_file = st.file_uploader("Upload Daily Data Excel", type=["xlsx"])
 
     # Date input with default to today's date
-    selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d')
+    selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d').lstrip('0')  # Remove leading zeros
 
     # Connect to Google Sheet
     sheet = connect_to_google_sheet(sheet_name, worksheet_name)
@@ -298,6 +298,7 @@ def main():
 
     with col1:
         if menu_sales_file is not None:
+            st.write("Menu Sales data preview:", pd.read_excel(menu_sales_file).head())
             if st.button("Update Menu Sales in Google Sheet"):
                 df_menu_sales = pd.read_excel(menu_sales_file)
                 menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
@@ -306,6 +307,7 @@ def main():
 
     with col2:
         if alacarte_file is not None:
+            st.write("A-La-Carte data preview:", pd.read_excel(alacarte_file).head())
             if st.button("Update A-La-Carte in Google Sheet"):
                 df_alacarte = pd.read_excel(alacarte_file)
                 alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
@@ -314,6 +316,7 @@ def main():
 
     with col3:
         if commodities_file is not None:
+            st.write("Commodities data preview:", pd.read_excel(commodities_file).head())
             if st.button("Update Commodities in Google Sheet"):
                 df_commodities = pd.read_excel(commodities_file)
                 commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Primary Advisor Name")
@@ -322,6 +325,7 @@ def main():
 
     with col4:
         if recommendations_file is not None:
+            st.write("Recommendations data preview:", pd.read_excel(recommendations_file).head())
             if st.button("Update Recommendations in Google Sheet"):
                 df_recommendations = pd.read_excel(recommendations_file)
                 rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
@@ -330,39 +334,40 @@ def main():
 
     with col5:
         if daily_file is not None:
+            st.write("Daily data preview:", pd.read_excel(daily_file).head())
             if st.button("Update Daily Data in Google Sheet"):
                 df_daily = pd.read_excel(daily_file)
                 daily_labor_gross, daily_parts_gross = process_daily_data(df_daily, "Name")
                 update_google_sheet(sheet, daily_labor_gross, daily_parts_gross, date=selected_date, start_row=14)  # Adjust start_row as needed
                 st.success("Daily data updated successfully.")
 
-    # Adding the 'Input All' button
+    # Optional: Adding the 'Input All' button for convenience
     if st.button("Input All"):
-        # Process all files if they are uploaded
-        if menu_sales_file is not None:
+        # Allow this to proceed with caution regarding API limits
+        if menu_sales_file:
             df_menu_sales = pd.read_excel(menu_sales_file)
             menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
             update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, date=selected_date, start_row=2)
         
-        if alacarte_file is not None:
+        if alacarte_file:
             df_alacarte = pd.read_excel(alacarte_file)
             alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
             update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, date=selected_date, start_row=5)
 
-        if commodities_file is not None:
+        if commodities_file:
             df_commodities = pd.read_excel(commodities_file)
             commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Primary Advisor Name")
             update_google_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, date=selected_date, start_row=8)
 
-        if recommendations_file is not None:
+        if recommendations_file:
             df_recommendations = pd.read_excel(recommendations_file)
             rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
             update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10)
 
-        if daily_file is not None:
+        if daily_file:
             df_daily = pd.read_excel(daily_file)
             daily_labor_gross, daily_parts_gross = process_daily_data(df_daily, "Name")
-            update_google_sheet(sheet, daily_labor_gross, daily_parts_gross, date=selected_date, start_row=14)  # Update start_row as needed
+            update_google_sheet(sheet, daily_labor_gross, daily_parts_gross, date=selected_date, start_row=14)  # Adjust start_row as needed
         
         st.success("All data updated successfully.")
 
