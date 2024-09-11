@@ -249,7 +249,7 @@ def main():
     set_bg_color()
 
     # Set a delay variable for easier adjustments
-    delay_seconds = 15  # Adjust the delay as needed
+    delay_seconds = 20  # Adjust the delay as needed
 
     st.title("Google Sheet Updater for Advisors")
 
