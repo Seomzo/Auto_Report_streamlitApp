@@ -301,31 +301,31 @@ def main():
         df_menu_sales = pd.read_excel(menu_sales_file)
         menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
         for advisor, count in menu_name_counts.items():
-            updates.append({'advisor': advisor, 'values': [count, menu_labor_gross_sums.get(advisor, 0), menu_parts_gross_sums.get(advisor, 0)]})
+            updates.append({'advisor': advisor, 'values': [int(count), float(menu_labor_gross_sums.get(advisor, 0)), float(menu_parts_gross_sums.get(advisor, 0))]})
     
     if alacarte_file is not None:
         df_alacarte = pd.read_excel(alacarte_file)
         alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
         for advisor, count in alacarte_name_counts.items():
-            updates.append({'advisor': advisor, 'values': [count, alacarte_labor_gross_sums.get(advisor, 0), alacarte_parts_gross_sums.get(advisor, 0)]})
+            updates.append({'advisor': advisor, 'values': [int(count), float(alacarte_labor_gross_sums.get(advisor, 0)), float(alacarte_parts_gross_sums.get(advisor, 0))]})
     
     if commodities_file is not None:
         df_commodities = pd.read_excel(commodities_file)
         commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Primary Advisor Name")
         for advisor, count in commodities_name_counts.items():
-            updates.append({'advisor': advisor, 'values': [count, commodities_parts_gross_sums.get(advisor, 0)]})
+            updates.append({'advisor': advisor, 'values': [int(count), float(commodities_parts_gross_sums.get(advisor, 0))]})
     
     if recommendations_file is not None:
         df_recommendations = pd.read_excel(recommendations_file)
         rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
         for advisor, count in rec_count.items():
-            updates.append({'advisor': advisor, 'values': [count, rec_sold_count.get(advisor, 0), rec_amount.get(advisor, 0), rec_sold_amount.get(advisor, 0)]})
+            updates.append({'advisor': advisor, 'values': [int(count), int(rec_sold_count.get(advisor, 0)), float(rec_amount.get(advisor, 0)), float(rec_sold_amount.get(advisor, 0))]})
     
     if daily_file is not None:
         df_daily = pd.read_excel(daily_file)
         daily_labor_gross, daily_parts_gross = process_daily_data(df_daily, "Name")
         for advisor, labor in daily_labor_gross.items():
-            updates.append({'advisor': advisor, 'values': [labor, daily_parts_gross.get(advisor, 0)]})
+            updates.append({'advisor': advisor, 'values': [float(labor), float(daily_parts_gross.get(advisor, 0))]})
 
     # Execute batch update if there are updates to apply
     if updates:
@@ -334,3 +334,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
