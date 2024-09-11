@@ -207,7 +207,9 @@ def process_daily_data(df, names_column="Name"):
 def batch_update_google_sheet(sheet, updates, date, start_row):
     headers = sheet.row_values(2)  # Assuming the date is in row 2
     
-    # Make sure to preserve leading zeros if required
+    # Strip leading zeros to match Google Sheet's date format (1, 2, 3, ...)
+    date = date.lstrip('0')
+    
     if date in headers:
         date_column_index = headers.index(date) + 1
     else:
@@ -287,7 +289,7 @@ def main():
     daily_file = st.file_uploader("Upload Daily Data Excel", type=["xlsx"])
 
     # Date input with default to today's date
-    selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d').zfill(2)  # Use zfill to preserve leading zeros
+    selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d').lstrip('0')  # Remove leading zeros
 
     # Connect to Google Sheet
     sheet = connect_to_google_sheet(sheet_name, worksheet_name)
