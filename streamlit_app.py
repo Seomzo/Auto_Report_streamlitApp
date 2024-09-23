@@ -206,7 +206,6 @@ def process_daily_data(df, names_column="Name"):
 
 
 
-
 def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False):
     headers = sheet.row_values(2)  # Assuming the date is in row 2
     date = date.lstrip('0')
@@ -218,30 +217,61 @@ def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_o
     
     sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]  # Adjust if advisors are in a different column
     
+    cells_to_update = []
+    format_requests = []
+    
     for advisor_name in name_counts.index:
-        try:
-            if advisor_name in sheet_advisor_names:
-                row_index = sheet_advisor_names.index(advisor_name) + start_row  # Find the row for the advisor
-                
-                # Update Count
-                count_value = int(name_counts[advisor_name]) if not pd.isna(name_counts[advisor_name]) else 0
-                sheet.update_cell(row_index, date_column_index, count_value)
-                
-                # Handle specific numbers of outputs based on dataset type
-                for i, arg in enumerate(args):
-                    value = float(arg.get(advisor_name, 0)) if not pd.isna(arg.get(advisor_name, 0)) else 0.0
-                    sheet.update_cell(row_index + i + 1, date_column_index, value)
-                
-                # Apply black text formatting to updated cells
-                black_format = CellFormat(textFormat={"foregroundColor": {"red": 0, "green": 0, "blue": 0}})
-                for i in range(len(args) + 1):  # +1 for the name count update
-                    format_cell_range(sheet, f"{gspread.utils.rowcol_to_a1(row_index + i, date_column_index)}", black_format)
-            else:
-                st.warning(f"{advisor_name} not found in the Google Sheet.")
-        except gspread.exceptions.APIError as e:
-            st.error(f"Error updating cell for {advisor_name}: {e}")
-        except Exception as e:
-            st.error(f"An error occurred: {e}")
+        if advisor_name in sheet_advisor_names:
+            row_index = sheet_advisor_names.index(advisor_name) + 1  # +1 because row indices start from 1 in gspread
+            row_index += start_row - 1  # Adjust for start_row
+            
+            # Update Count
+            count_value = int(name_counts[advisor_name]) if not pd.isna(name_counts[advisor_name]) else 0
+            cell = Cell(row=row_index, col=date_column_index, value=count_value)
+            cells_to_update.append(cell)
+            
+            # Handle specific numbers of outputs based on dataset type
+            for i, arg in enumerate(args):
+                value = float(arg.get(advisor_name, 0)) if not pd.isna(arg.get(advisor_name, 0)) else 0.0
+                cell = Cell(row=row_index + i + 1, col=date_column_index, value=value)
+                cells_to_update.append(cell)
+            
+            # Prepare formatting (optional)
+            for i in range(len(args) + 1):  # +1 for the name count update
+                cell_range = {
+                    'repeatCell': {
+                        'range': {
+                            'sheetId': sheet.id,
+                            'startRowIndex': row_index + i - 1,  # 0-based index
+                            'endRowIndex': row_index + i,
+                            'startColumnIndex': date_column_index - 1,  # 0-based index
+                            'endColumnIndex': date_column_index
+                        },
+                        'cell': {
+                            'userEnteredFormat': {
+                                'textFormat': {'foregroundColor': {'red': 0, 'green': 0, 'blue': 0}}
+                            }
+                        },
+                        'fields': 'userEnteredFormat.textFormat.foregroundColor'
+                    }
+                }
+                format_requests.append(cell_range)
+        else:
+            st.warning(f"{advisor_name} not found in the Google Sheet.")
+    
+    try:
+        if cells_to_update:
+            sheet.update_cells(cells_to_update)
+        
+        # Perform batch formatting
+        if format_requests:
+            body = {'requests': format_requests}
+            sheet.spreadsheet.batch_update(body)
+    except gspread.exceptions.APIError as e:
+        st.error(f"Error updating cells: {e}")
+    except Exception as e:
+        st.error(f"An error occurred: {e}")
+
 
 
 
@@ -249,7 +279,7 @@ def main():
     set_bg_color()
 
     # Set a delay variable for easier adjustments
-    delay_seconds = 21  # Adjust the delay as needed
+    delay_seconds = 5  # Adjust the delay as needed
 
     st.title("Google Sheet Updater for Advisors")
 
