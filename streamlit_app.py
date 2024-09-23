@@ -3,6 +3,7 @@ import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from gspread_formatting import CellFormat, format_cell_range
+from gspread.cell import Cell
 from datetime import datetime
 import warnings
 import time
