@@ -270,8 +270,8 @@ def update_google_sheet(sheet, data_series1, *args, date, start_row):
 def main():
     set_bg_color()
 
-    # Set a delay variable for easier adjustments
-    delay_seconds = 0.01  # Adjust the delay as needed
+   
+    delay_seconds = 0.01 
 
     st.title("Google Sheet Updater for Advisors")
 
@@ -331,7 +331,7 @@ def main():
                 menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
                 update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, date=selected_date, start_row=2)
                 st.success("Menu Sales data updated successfully.")
-                time.sleep(delay_seconds)  # Using the delay variable
+                time.sleep(delay_seconds) 
 
     with col2:
         if alacarte_file is not None:
@@ -340,7 +340,7 @@ def main():
                 alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
                 update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, date=selected_date, start_row=5)
                 st.success("A-La-Carte data updated successfully.")
-                time.sleep(delay_seconds)  # Using the delay variable
+                time.sleep(delay_seconds)  
 
     with col3:
         if commodities_file is not None:
@@ -349,7 +349,7 @@ def main():
                 commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Primary Advisor Name")
                 update_google_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, date=selected_date, start_row=8)
                 st.success("Commodities data updated successfully.")
-                time.sleep(delay_seconds)  # Using the delay variable
+                time.sleep(delay_seconds)  
 
     with col4:
         if recommendations_file is not None:
@@ -358,7 +358,7 @@ def main():
                 rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
                 update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10)
                 st.success("Recommendations data updated successfully.")
-                time.sleep(delay_seconds)  # Using the delay variable
+                time.sleep(delay_seconds) 
 
     with col5:
         if daily_file is not None:
@@ -367,7 +367,7 @@ def main():
                 daily_labor_gross, daily_parts_gross = process_daily_data(df_daily, "Name")
                 update_google_sheet(sheet, daily_labor_gross, daily_parts_gross, date=selected_date, start_row=14)  # Adjust start_row as needed
                 st.success("Daily data updated successfully.")
-                time.sleep(delay_seconds)  # Using the delay variable
+                time.sleep(delay_seconds)  
 
     # Optional: Adding the 'Input All' button for convenience
     if st.button("Input All"):
@@ -376,31 +376,31 @@ def main():
             df_menu_sales = pd.read_excel(menu_sales_file)
             menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
             update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, date=selected_date, start_row=2)
-            time.sleep(delay_seconds)  # Using the delay variable
+            time.sleep(delay_seconds)  
         
         if alacarte_file:
             df_alacarte = pd.read_excel(alacarte_file)
             alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
             update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, date=selected_date, start_row=5)
-            time.sleep(delay_seconds)  # Using the delay variable
+            time.sleep(delay_seconds)  
 
         if commodities_file:
             df_commodities = pd.read_excel(commodities_file)
             commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Primary Advisor Name")
             update_google_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, date=selected_date, start_row=8)
-            time.sleep(delay_seconds)  # Using the delay variable
+            time.sleep(delay_seconds)  
 
         if recommendations_file:
             df_recommendations = pd.read_excel(recommendations_file)
             rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
             update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10)
-            time.sleep(delay_seconds)  # Using the delay variable
+            time.sleep(delay_seconds)  
 
         if daily_file:
             df_daily = pd.read_excel(daily_file)
             daily_labor_gross, daily_parts_gross = process_daily_data(df_daily, "Name")
             update_google_sheet(sheet, daily_labor_gross, daily_parts_gross, date=selected_date, start_row=14)  # Adjust start_row as needed
-            time.sleep(delay_seconds)  # Using the delay variable
+            time.sleep(delay_seconds) 
         
         st.success("All data updated successfully.")
 
