@@ -7,6 +7,8 @@ from gspread.cell import Cell
 from datetime import datetime
 import warnings
 import time
+import numpy as np
+
 
 
 # Suppress UserWarning related to openpyxl's default style
@@ -205,6 +207,22 @@ def process_daily_data(df, names_column="Name"):
 
     return labor_gross_sums, parts_gross_sums
 
+def convert_to_native_type(value):
+    """
+    Convert NumPy and Pandas data types to native Python types.
+    """
+    if pd.isna(value):
+        return 0  # Or None, depending on how you want to handle NaNs
+    elif isinstance(value, (np.integer, np.int64, np.int32, int)):
+        return int(value)
+    elif isinstance(value, (np.floating, np.float64, np.float32, float)):
+        return float(value)
+    elif isinstance(value, (np.bool_, bool)):
+        return bool(value)
+    elif isinstance(value, (np.str_, str)):
+        return str(value)
+    else:
+        return str(value)  # Fallback to string
 
 
 def update_google_sheet(sheet, data_series1, *args, date, start_row):
@@ -227,8 +245,7 @@ def update_google_sheet(sheet, data_series1, *args, date, start_row):
 
             # Get value from data_series1
             value1 = data_series1[advisor_name]
-            if pd.isna(value1):
-                value1 = 0
+            value1 = convert_to_native_type(value1)
 
             # Create cell for value1
             cell = Cell(row=row_index, col=date_column_index, value=value1)
@@ -237,8 +254,8 @@ def update_google_sheet(sheet, data_series1, *args, date, start_row):
             # Handle additional data series
             for i, data_series in enumerate(args):
                 value = data_series.get(advisor_name, 0)
-                if pd.isna(value):
-                    value = 0
+                value = convert_to_native_type(value)
+
                 cell = Cell(row=row_index + i + 1, col=date_column_index, value=value)
                 cells_to_update.append(cell)
         else:
@@ -247,7 +264,6 @@ def update_google_sheet(sheet, data_series1, *args, date, start_row):
     # Update cells
     if cells_to_update:
         sheet.update_cells(cells_to_update)
-
 
 
 
