@@ -207,7 +207,7 @@ def process_daily_data(df, names_column="Name"):
 
 
 
-def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_outputs=False):
+def update_google_sheet(sheet, data_series1, *args, date, start_row):
     headers = sheet.row_values(2)  # Assuming the date is in row 2
     date = date.lstrip('0')
     if date in headers:
@@ -215,63 +215,38 @@ def update_google_sheet(sheet, name_counts, *args, date, start_row, handle_two_o
     else:
         st.error(f"Date {date} not found in the sheet.")
         return
-    
+
     sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]  # Adjust if advisors are in a different column
-    
+
     cells_to_update = []
-    format_requests = []
-    
-    for advisor_name in name_counts.index:
+
+    for advisor_name in data_series1.index:
         if advisor_name in sheet_advisor_names:
             row_index = sheet_advisor_names.index(advisor_name) + 1  # +1 because row indices start from 1 in gspread
             row_index += start_row - 1  # Adjust for start_row
-            
-            # Update Count
-            count_value = int(name_counts[advisor_name]) if not pd.isna(name_counts[advisor_name]) else 0
-            cell = Cell(row=row_index, col=date_column_index, value=count_value)
+
+            # Get value from data_series1
+            value1 = data_series1[advisor_name]
+            if pd.isna(value1):
+                value1 = 0
+
+            # Create cell for value1
+            cell = Cell(row=row_index, col=date_column_index, value=value1)
             cells_to_update.append(cell)
-            
-            # Handle specific numbers of outputs based on dataset type
-            for i, arg in enumerate(args):
-                value = float(arg.get(advisor_name, 0)) if not pd.isna(arg.get(advisor_name, 0)) else 0.0
+
+            # Handle additional data series
+            for i, data_series in enumerate(args):
+                value = data_series.get(advisor_name, 0)
+                if pd.isna(value):
+                    value = 0
                 cell = Cell(row=row_index + i + 1, col=date_column_index, value=value)
                 cells_to_update.append(cell)
-            
-            # Prepare formatting (optional)
-            for i in range(len(args) + 1):  # +1 for the name count update
-                cell_range = {
-                    'repeatCell': {
-                        'range': {
-                            'sheetId': sheet.id,
-                            'startRowIndex': row_index + i - 1,  # 0-based index
-                            'endRowIndex': row_index + i,
-                            'startColumnIndex': date_column_index - 1,  # 0-based index
-                            'endColumnIndex': date_column_index
-                        },
-                        'cell': {
-                            'userEnteredFormat': {
-                                'textFormat': {'foregroundColor': {'red': 0, 'green': 0, 'blue': 0}}
-                            }
-                        },
-                        'fields': 'userEnteredFormat.textFormat.foregroundColor'
-                    }
-                }
-                format_requests.append(cell_range)
         else:
             st.warning(f"{advisor_name} not found in the Google Sheet.")
-    
-    try:
-        if cells_to_update:
-            sheet.update_cells(cells_to_update)
-        
-        # Perform batch formatting
-        if format_requests:
-            body = {'requests': format_requests}
-            sheet.spreadsheet.batch_update(body)
-    except gspread.exceptions.APIError as e:
-        st.error(f"Error updating cells: {e}")
-    except Exception as e:
-        st.error(f"An error occurred: {e}")
+
+    # Update cells
+    if cells_to_update:
+        sheet.update_cells(cells_to_update)
 
 
 
