@@ -124,7 +124,7 @@ def process_alacarte_data(df, names_column):
     parts_gross_sums = df.groupby(names_column)['Opcode Parts Gross'].sum()
     return name_counts, labor_gross_sums, parts_gross_sums
 
-def process_commodities_data(df, names_column="Primary Advisor Name"):
+# def process_commodities_data(df, names_column="Primary Advisor Name"):
     #st.write("Available columns in Commodities data:", df.columns.tolist())
     df.columns = df.columns.str.strip()
     if names_column not in df.columns:
@@ -139,6 +139,58 @@ def process_commodities_data(df, names_column="Primary Advisor Name"):
     name_counts = df[names_column].value_counts()
     parts_gross_sums = df.groupby(names_column)[gross_column].sum()
     return name_counts, parts_gross_sums
+
+def process_commodity_file(df, names_column='Primary Advisor Name', gross_column='Gross'):
+    df[names_column] = df[names_column].astype(str).str.strip().str.upper()
+    df[gross_column] = clean_column_data(df[gross_column])
+
+    # Count the number of sales per advisor
+    name_counts = df[names_column].value_counts()
+
+    # Sum gross amounts per advisor
+    parts_gross_sums = df.groupby(names_column)[gross_column].sum()
+
+    # Convert to dictionaries
+    name_counts = name_counts.to_dict()
+    parts_gross_sums = parts_gross_sums.to_dict()
+
+    return name_counts, parts_gross_sums
+
+def process_alignment_file(df, names_column='Advisor Name'):
+    df[names_column] = df[names_column].astype(str).str.strip().str.upper()
+    
+    
+    df['Opcode Parts Gross'] = clean_column_data(df['Opcode Parts Gross'])
+    df['Opcode Labor Gross'] = clean_column_data(df['Opcode Labor Gross'])
+
+    # Count the number of sales per advisor
+    name_counts = df[names_column].value_counts() / 2  
+
+    # Sum gross amounts per advisor
+    parts_gross_sums = df.groupby(names_column)['Opcode Parts Gross'].sum()
+    labor_gross_sums = df.groupby(names_column)['Opcode Labor Gross'].sum()
+
+    # Convert to dictionaries
+    name_counts = name_counts.to_dict()
+    parts_gross_sums = parts_gross_sums.to_dict()
+    labor_gross_sums = labor_gross_sums.to_dict()
+
+    return name_counts, parts_gross_sums, labor_gross_sums
+
+commodities_row_mapping = {
+    'Air Filters': 11,
+    'Cabin Filters': 12,
+    'Batteries': 13,
+    'Tires': 14,
+    'Brakes': 15,
+    'Alignments': 16,
+    'Wipers': 17,
+    'Belts': 18,
+    'Fluids': 19,
+    'Factory Chemicals': 20,
+    'Labor Gross': 21, 
+    'Parts Gross': 22 }  
+
 
 def process_recommendations_data(df, names_column="Name"):
     # Display available columns for debugging
@@ -211,6 +263,8 @@ def convert_to_native_type(value):
     """
     Convert NumPy and Pandas data types to native Python types.
     """
+    if isinstance(value, pd.Series):
+        value = value.sum()
     if pd.isna(value):
         return 0  # Or None, depending on how you want to handle NaNs
     elif isinstance(value, (np.integer, np.int64, np.int32, int)):
@@ -222,57 +276,102 @@ def convert_to_native_type(value):
     elif isinstance(value, (np.str_, str)):
         return str(value)
     else:
-        return str(value)  # Fallback to string
+        return str(value)
 
-
-def update_google_sheet(sheet, data_series1, *args, date, start_row):
-    headers = sheet.row_values(2)  # Assuming the date is in row 2
-    date = date.lstrip('0')
-    if date in headers:
-        date_column_index = headers.index(date) + 1
-    else:
-        st.error(f"Date {date} not found in the sheet.")
-        return
-
-    sheet_advisor_names = [name.strip().upper() for name in sheet.col_values(1)]  # Adjust if advisors are in a different column
-
+def update_google_sheet(sheet, data_series1, *args, date_col_index, start_row_offset, advisor_mapping):
     cells_to_update = []
 
-    for advisor_name in data_series1.index:
-        if advisor_name in sheet_advisor_names:
-            row_index = sheet_advisor_names.index(advisor_name) + 1  # +1 because row indices start from 1 in gspread
-            row_index += start_row - 1  # Adjust for start_row
+    for advisor_name, start_row in advisor_mapping.items():
+        row_index = start_row + start_row_offset
 
-            # Get value from data_series1
-            value1 = data_series1[advisor_name]
-            value1 = convert_to_native_type(value1)
+        # Get value from data_series1
+        value1 = data_series1.get(advisor_name, 0)
+        value1 = convert_to_native_type(value1)
 
-            # Create cell for value1
-            cell = Cell(row=row_index, col=date_column_index, value=value1)
+        # Create cell for value1
+        cell = Cell(row=row_index, col=date_col_index, value=value1)
+        cells_to_update.append(cell)
+
+        # Handle additional data series
+        for i, data_series in enumerate(args):
+            value = data_series.get(advisor_name, 0)
+            value = convert_to_native_type(value)
+            cell = Cell(row=row_index + i + 1, col=date_col_index, value=value)
             cells_to_update.append(cell)
 
-            # Handle additional data series
-            for i, data_series in enumerate(args):
-                value = data_series.get(advisor_name, 0)
-                value = convert_to_native_type(value)
-
-                cell = Cell(row=row_index + i + 1, col=date_column_index, value=value)
-                cells_to_update.append(cell)
-        else:
-            st.warning(f"{advisor_name} not found in the Google Sheet.")
-
-    # Update cells
     if cells_to_update:
         sheet.update_cells(cells_to_update)
 
+def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodities_list, advisor_mapping):
+    cells_to_update = []
 
+    # Define the row offsets for commodities within each advisor's block
+    commodity_row_offsets = {
+        'Air Filters': 8,
+        'Cabin Filters': 9,
+        'Batteries': 10,
+        'Tires': 11,
+        'Brakes': 12,
+        'Alignments': 13,
+        'Wipers': 14,
+        'Belts': 15,
+        'Fluids': 16,
+        'Factory Chemicals': 17,
+    }
+
+    # Offsets for Labor Gross and Parts Gross
+    labor_gross_offset = 18  
+    parts_gross_offset = 19  
+
+    # Initialize dictionaries to accumulate gross sums per advisor
+    total_parts_gross_per_advisor = {advisor: 0 for advisor in advisor_mapping.keys()}
+    total_labor_gross_per_advisor = {advisor: 0 for advisor in advisor_mapping.keys()}
+
+    for commodity in commodities_list:
+        data = commodities_data.get(commodity, {})
+        name_counts = data.get('name_counts', {})
+        parts_gross_sums = data.get('parts_gross_sums', {})
+        labor_gross_sums = data.get('labor_gross_sums', {}) if commodity == 'Alignments' else {}
+
+        for advisor_name, start_row in advisor_mapping.items():
+            base_row = start_row + commodity_row_offsets[commodity] - 1  # Adjust for zero-based indexing
+
+            # Name Counts
+            count_value = convert_to_native_type(name_counts.get(advisor_name, 0))
+
+            # Update Name Count under the commodity
+            cell_count = Cell(row=base_row, col=date_col_index, value=count_value)
+            cells_to_update.append(cell_count)
+
+            # Accumulate Parts Gross
+            parts_gross_value = convert_to_native_type(parts_gross_sums.get(advisor_name, 0))
+            total_parts_gross_per_advisor[advisor_name] += parts_gross_value
+
+            # Accumulate Labor Gross (for Alignments)
+            if commodity == 'Alignments':
+                labor_gross_value = convert_to_native_type(labor_gross_sums.get(advisor_name, 0))
+                total_labor_gross_per_advisor[advisor_name] += labor_gross_value
+
+    # After processing all commodities, update the Labor Gross and Parts Gross rows
+    for advisor_name, start_row in advisor_mapping.items():
+        # Update Labor Gross
+        labor_gross = total_labor_gross_per_advisor.get(advisor_name, 0)
+        labor_gross_row = start_row + labor_gross_offset - 1
+        cell_labor_gross = Cell(row=labor_gross_row, col=date_col_index, value=labor_gross)
+        cells_to_update.append(cell_labor_gross)
+
+        # Update Parts Gross
+        parts_gross = total_parts_gross_per_advisor.get(advisor_name, 0)
+        parts_gross_row = start_row + parts_gross_offset - 1
+        cell_parts_gross = Cell(row=parts_gross_row, col=date_col_index, value=parts_gross)
+        cells_to_update.append(cell_parts_gross)
+
+    if cells_to_update:
+        sheet.update_cells(cells_to_update)
 
 def main():
     set_bg_color()
-
-   
     delay_seconds = 0.01 
-
     st.title("Google Sheet Updater for Advisors")
 
     st.markdown(
@@ -308,18 +407,77 @@ def main():
     # File uploads for different sections
     menu_sales_file = st.file_uploader("Upload Menu Sales Excel", type=["xlsx"])
     alacarte_file = st.file_uploader("Upload A-La-Carte Excel", type=["xlsx"])
-    commodities_file = st.file_uploader("Upload Commodities Excel", type=["xlsx"])
+    # commodities_file = st.file_uploader("Upload Commodities Excel", type=["xlsx"])
+    
     recommendations_file = st.file_uploader("Upload Recommendations Excel", type=["xlsx"])
     daily_file = st.file_uploader("Upload Daily Data Excel", type=["xlsx"])
 
-    # Date input with default to today's date
-    selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d').lstrip('0')  # Remove leading zeros
+    # In your main() function, under Commodities
+    st.subheader("Upload Commodities Files")
+
+    commodities_list = [
+        'Air Filters', 'Cabin Filters', 'Batteries', 'Tires', 'Brakes',
+        'Alignments', 'Wipers', 'Belts', 'Fluids', 'Factory Chemicals'
+    ]
+    
+    commodities_files = {}
+    for commodity in commodities_list:
+        key = f"commodity_{commodity}"
+        commodities_files[commodity] = st.file_uploader(f"Upload {commodity} Excel", type=["xlsx"], key=key)
+
+    # Date input
+    selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d').lstrip('0')
 
     # Connect to Google Sheet
     sheet = connect_to_google_sheet(sheet_name, worksheet_name)
     if sheet is None:
         st.error("Failed to connect to the Google Sheet. Please check the inputs and try again.")
         return
+
+    # Get date column index
+    date_row = sheet.row_values(2)[2:]  # Dates start from column 3 (after columns A and B)
+    date = selected_date
+    if date in date_row:
+        date_col_index = date_row.index(date) + 3  # +3 because columns start from 1 and we skipped two columns
+    else:
+        st.error(f"Date {date} not found in the sheet.")
+        return
+
+    # Get advisor names and their starting rows
+    col_a_values = sheet.col_values(1)[3:]  # Get values from row 4 onwards
+    advisor_names = []
+    advisor_start_rows = []
+    row = 4  # Starting from row 4
+    idx = 0
+    while idx < len(col_a_values):
+        advisor_name = col_a_values[idx]
+        if not advisor_name:
+            break  # No more advisors
+        advisor_name = advisor_name.strip().upper()
+        advisor_names.append(advisor_name)
+        advisor_start_rows.append(row + idx)
+        idx += 26  # Assuming each advisor block has 27 rows (including empty row)
+    advisor_mapping = dict(zip(advisor_names, advisor_start_rows))
+
+    # Define the row offsets for different data types within each advisor's block
+    data_row_offsets = {
+        'Menu Sales': 2,
+        'Menu Sales Labor Gross': 3,
+        'Menu Sales Parts Gross': 4,
+        'A-la-carte Count': 5,
+        'A-la-carte Labor Gross': 6,
+        'A-la-carte Parts Gross': 7,
+        # Commodities are from row 2 to 11
+        'Labor Gross': 12,
+        'Parts Gross': 13,
+        'Rec Count': 20,
+        'Rec Sold Count': 21,
+        'Rec Amount': 22,
+        'Rec Sold Amount': 23,
+        'Daily Labor Gross': 24,
+        'Daily Parts Gross': 25,
+    }
+
 
     # Creating horizontal layout for buttons
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -329,80 +487,193 @@ def main():
             if st.button("Update Menu Sales in Google Sheet"):
                 df_menu_sales = pd.read_excel(menu_sales_file)
                 menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
-                update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, date=selected_date, start_row=2)
+                update_google_sheet(
+                    sheet,
+                    menu_name_counts,
+                    menu_labor_gross_sums,
+                    menu_parts_gross_sums,
+                    date_col_index=date_col_index,
+                    start_row_offset=data_row_offsets['Menu Sales'] - 1,
+                    advisor_mapping=advisor_mapping
+                )
                 st.success("Menu Sales data updated successfully.")
-                time.sleep(delay_seconds) 
+                time.sleep(delay_seconds)
 
     with col2:
         if alacarte_file is not None:
             if st.button("Update A-La-Carte in Google Sheet"):
                 df_alacarte = pd.read_excel(alacarte_file)
                 alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
-                update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, date=selected_date, start_row=5)
+                update_google_sheet(
+                    sheet,
+                    alacarte_name_counts,
+                    alacarte_labor_gross_sums,
+                    alacarte_parts_gross_sums,
+                    date_col_index=date_col_index,
+                    start_row_offset=data_row_offsets['A-la-carte Count'] - 1,
+                    advisor_mapping=advisor_mapping
+                )
                 st.success("A-La-Carte data updated successfully.")
-                time.sleep(delay_seconds)  
+                time.sleep(delay_seconds)
 
     with col3:
-        if commodities_file is not None:
+        if any(commodities_files.values()):
             if st.button("Update Commodities in Google Sheet"):
-                df_commodities = pd.read_excel(commodities_file)
-                commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Primary Advisor Name")
-                update_google_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, date=selected_date, start_row=8)
+                # Collect commodities data
+                commodities_data = {}
+
+                for commodity in commodities_list:
+                    if commodities_files[commodity] is not None:
+                        if commodity == 'Alignments':
+                            df = pd.read_excel(commodities_files[commodity], header=2)
+                            name_counts, parts_gross_sums, labor_gross_sums = process_alignment_file(df)
+                            commodities_data[commodity] = {
+                                'name_counts': name_counts,
+                                'parts_gross_sums': parts_gross_sums,
+                                'labor_gross_sums': labor_gross_sums
+                            }
+                        else:
+                            df = pd.read_excel(commodities_files[commodity])
+                            name_counts, parts_gross_sums = process_commodity_file(df)
+                            commodities_data[commodity] = {
+                                'name_counts': name_counts,
+                                'parts_gross_sums': parts_gross_sums
+                            }
+                update_commodities_in_sheet(
+                    sheet,
+                    date_col_index=date_col_index,
+                    commodities_data=commodities_data,
+                    commodities_list=commodities_list,
+                    advisor_mapping=advisor_mapping
+                )
                 st.success("Commodities data updated successfully.")
-                time.sleep(delay_seconds)  
+                time.sleep(delay_seconds)
 
     with col4:
         if recommendations_file is not None:
             if st.button("Update Recommendations in Google Sheet"):
                 df_recommendations = pd.read_excel(recommendations_file)
                 rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
-                update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10)
+                update_google_sheet(
+                    sheet,
+                    rec_count,
+                    rec_sold_count,
+                    rec_amount,
+                    rec_sold_amount,
+                    date_col_index=date_col_index,
+                    start_row_offset=data_row_offsets['Rec Count'] - 1,
+                    advisor_mapping=advisor_mapping
+                )
                 st.success("Recommendations data updated successfully.")
-                time.sleep(delay_seconds) 
+                time.sleep(delay_seconds)
 
     with col5:
         if daily_file is not None:
             if st.button("Update Daily Data in Google Sheet"):
                 df_daily = pd.read_excel(daily_file)
                 daily_labor_gross, daily_parts_gross = process_daily_data(df_daily, "Name")
-                update_google_sheet(sheet, daily_labor_gross, daily_parts_gross, date=selected_date, start_row=14)  # Adjust start_row as needed
+                update_google_sheet(
+                    sheet,
+                    daily_labor_gross,
+                    daily_parts_gross,
+                    date_col_index=date_col_index,
+                    start_row_offset=data_row_offsets['Daily Labor Gross'] - 1,
+                    advisor_mapping=advisor_mapping
+                )
                 st.success("Daily data updated successfully.")
-                time.sleep(delay_seconds)  
+                time.sleep(delay_seconds)
 
     # Optional: Adding the 'Input All' button for convenience
     if st.button("Input All"):
-        # Allow this to proceed with caution regarding API limits
+        # Process Menu Sales
         if menu_sales_file:
             df_menu_sales = pd.read_excel(menu_sales_file)
             menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
-            update_google_sheet(sheet, menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums, date=selected_date, start_row=2)
-            time.sleep(delay_seconds)  
-        
+            update_google_sheet(
+                sheet,
+                menu_name_counts,
+                menu_labor_gross_sums,
+                menu_parts_gross_sums,
+                date_col_index=date_col_index,
+                start_row_offset=data_row_offsets['Menu Sales'] - 1,
+                advisor_mapping=advisor_mapping
+            )
+            time.sleep(delay_seconds)
+
+        # Process A-La-Carte
         if alacarte_file:
             df_alacarte = pd.read_excel(alacarte_file)
             alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
-            update_google_sheet(sheet, alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums, date=selected_date, start_row=5)
-            time.sleep(delay_seconds)  
+            update_google_sheet(
+                sheet,
+                alacarte_name_counts,
+                alacarte_labor_gross_sums,
+                alacarte_parts_gross_sums,
+                date_col_index=date_col_index,
+                start_row_offset=data_row_offsets['A-la-carte Count'] - 1,
+                advisor_mapping=advisor_mapping
+            )
+            time.sleep(delay_seconds)
 
-        if commodities_file:
-            df_commodities = pd.read_excel(commodities_file)
-            commodities_name_counts, commodities_parts_gross_sums = process_commodities_data(df_commodities, "Primary Advisor Name")
-            update_google_sheet(sheet, commodities_name_counts, commodities_parts_gross_sums, date=selected_date, start_row=8)
-            time.sleep(delay_seconds)  
+        # Process Commodities and Alignments
+        commodities_data = {}
+        for commodity in commodities_list:
+            if commodities_files[commodity] is not None:
+                if commodity == 'Alignments':
+                    df = pd.read_excel(commodities_files[commodity], header=2)
+                    name_counts, parts_gross_sums, labor_gross_sums = process_alignment_file(df)
+                    commodities_data[commodity] = {
+                        'name_counts': name_counts,
+                        'parts_gross_sums': parts_gross_sums,
+                        'labor_gross_sums': labor_gross_sums
+                    }
+                else:
+                    df = pd.read_excel(commodities_files[commodity])
+                    name_counts, parts_gross_sums = process_commodity_file(df)
+                    commodities_data[commodity] = {
+                        'name_counts': name_counts,
+                        'parts_gross_sums': parts_gross_sums
+                    }
+        # Update Commodities in Google Sheet
+        update_commodities_in_sheet(
+            sheet,
+            date_col_index=date_col_index,
+            commodities_data=commodities_data,
+            commodities_list=commodities_list,
+            advisor_mapping=advisor_mapping
+        )
+        time.sleep(delay_seconds)
 
+        # Process Recommendations
         if recommendations_file:
             df_recommendations = pd.read_excel(recommendations_file)
             rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
-            update_google_sheet(sheet, rec_count, rec_sold_count, rec_amount, rec_sold_amount, date=selected_date, start_row=10)
-            time.sleep(delay_seconds)  
+            update_google_sheet(
+                sheet,
+                rec_count,
+                rec_sold_count,
+                rec_amount,
+                rec_sold_amount,
+                date_col_index=date_col_index,
+                start_row_offset=data_row_offsets['Rec Count'] - 1,
+                advisor_mapping=advisor_mapping
+            )
+            time.sleep(delay_seconds)
 
+        # Process Daily Data
         if daily_file:
             df_daily = pd.read_excel(daily_file)
             daily_labor_gross, daily_parts_gross = process_daily_data(df_daily, "Name")
-            update_google_sheet(sheet, daily_labor_gross, daily_parts_gross, date=selected_date, start_row=14)  # Adjust start_row as needed
-            time.sleep(delay_seconds) 
-        
-        st.success("All data updated successfully.")
+            update_google_sheet(
+                sheet,
+                daily_labor_gross,
+                daily_parts_gross,
+                date_col_index=date_col_index,
+                start_row_offset=data_row_offsets['Daily Labor Gross'] - 1,
+                advisor_mapping=advisor_mapping
+            )
+            time.sleep(delay_seconds)
 
+        st.success("All data updated successfully.")
 if __name__ == "__main__":
     main()
