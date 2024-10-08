@@ -156,6 +156,38 @@ def process_commodity_file(df, names_column='Primary Advisor Name', gross_column
 
     return name_counts, parts_gross_sums
 
+def process_tires_data(df, names_column='Primary Advisor Name', quantity_column='Actual Quantity', gross_column='Gross'):
+  
+    # Normalize advisor names
+    df[names_column] = df[names_column].astype(str).str.strip().str.upper()
+    
+    # Define required columns
+    required_columns = [names_column, quantity_column, gross_column]
+    
+    # Check if required columns exist
+    for col in required_columns:
+        if col not in df.columns:
+            st.error(f"Column '{col}' not found in the uploaded Tires Excel. Available columns: {df.columns.tolist()}")
+            return {}, {}
+    
+    # Clean the 'Actual Quantity' and 'Gross' columns
+    df[quantity_column] = clean_column_data(df[quantity_column])
+    df[gross_column] = clean_column_data(df[gross_column])
+    
+    # Sum Actual Quantity and Gross per advisor
+    actual_quantity_sums = df.groupby(names_column)[quantity_column].sum().to_dict()
+    gross_sums = df.groupby(names_column)[gross_column].sum().to_dict()
+    
+    # Convert to native types
+    actual_quantity_sums = {k: float(v) for k, v in actual_quantity_sums.items()}
+    gross_sums = {k: float(v) for k, v in gross_sums.items()}
+    
+    # Debug: Print the processed values
+    # st.write("Tires Actual Quantity Sums:", actual_quantity_sums)
+    # st.write("Tires Gross Sums:", gross_sums)
+    
+    return actual_quantity_sums, gross_sums
+
 def process_alignment_file(df, names_column='Advisor Name'):
     df[names_column] = df[names_column].astype(str).str.strip().str.upper()
     
@@ -329,28 +361,43 @@ def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodi
 
     for commodity in commodities_list:
         data = commodities_data.get(commodity, {})
-        name_counts = data.get('name_counts', {})
-        parts_gross_sums = data.get('parts_gross_sums', {})
-        labor_gross_sums = data.get('labor_gross_sums', {}) if commodity == 'Alignments' else {}
+        
+        if commodity == 'Tires':
+            actual_quantity_sums = data.get('actual_quantity_sums', {})
+            gross_sums = data.get('gross_sums', {})
+        else:
+            name_counts = data.get('name_counts', {})
+            parts_gross_sums = data.get('parts_gross_sums', {})
+            labor_gross_sums = data.get('labor_gross_sums', {}) if commodity == 'Alignments' else {}
 
         for advisor_name, start_row in advisor_mapping.items():
             base_row = start_row + commodity_row_offsets[commodity] - 1  # Adjust for zero-based indexing
 
-            # Name Counts
-            count_value = convert_to_native_type(name_counts.get(advisor_name, 0))
+            if commodity == 'Tires':
+                # Update Actual Quantity
+                actual_quantity = convert_to_native_type(actual_quantity_sums.get(advisor_name, 0))
+                cell_actual_quantity = Cell(row=base_row, col=date_col_index, value=actual_quantity)
+                cells_to_update.append(cell_actual_quantity)
 
-            # Update Name Count under the commodity
-            cell_count = Cell(row=base_row, col=date_col_index, value=count_value)
-            cells_to_update.append(cell_count)
+                # Update Gross (add to Parts Gross)
+                gross = convert_to_native_type(gross_sums.get(advisor_name, 0))
+                total_parts_gross_per_advisor[advisor_name] += gross
+            else:
+                # Name Counts
+                count_value = convert_to_native_type(name_counts.get(advisor_name, 0))
 
-            # Accumulate Parts Gross
-            parts_gross_value = convert_to_native_type(parts_gross_sums.get(advisor_name, 0))
-            total_parts_gross_per_advisor[advisor_name] += parts_gross_value
+                # Update Name Count under the commodity
+                cell_count = Cell(row=base_row, col=date_col_index, value=count_value)
+                cells_to_update.append(cell_count)
 
-            # Accumulate Labor Gross (for Alignments)
-            if commodity == 'Alignments':
-                labor_gross_value = convert_to_native_type(labor_gross_sums.get(advisor_name, 0))
-                total_labor_gross_per_advisor[advisor_name] += labor_gross_value
+                # Accumulate Parts Gross
+                parts_gross_value = convert_to_native_type(parts_gross_sums.get(advisor_name, 0))
+                total_parts_gross_per_advisor[advisor_name] += parts_gross_value
+
+                # Accumulate Labor Gross (for Alignments)
+                if commodity == 'Alignments':
+                    labor_gross_value = convert_to_native_type(labor_gross_sums.get(advisor_name, 0))
+                    total_labor_gross_per_advisor[advisor_name] += labor_gross_value
 
     # After processing all commodities, update the Labor Gross and Parts Gross rows
     for advisor_name, start_row in advisor_mapping.items():
@@ -365,6 +412,10 @@ def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodi
         parts_gross_row = start_row + parts_gross_offset - 1
         cell_parts_gross = Cell(row=parts_gross_row, col=date_col_index, value=parts_gross)
         cells_to_update.append(cell_parts_gross)
+
+    # Debug: Print out the cells being updated
+    for cell in cells_to_update:
+        st.write(f"Updating cell ({cell.row}, {cell.col}): {cell.value}")
 
     if cells_to_update:
         sheet.update_cells(cells_to_update)
@@ -532,8 +583,20 @@ def main():
                                 'parts_gross_sums': parts_gross_sums,
                                 'labor_gross_sums': labor_gross_sums
                             }
+                        elif commodity == 'Tires':
+                            df = pd.read_excel(commodities_files[commodity], header=0)  # Headers are on row 1
+                            actual_quantity_sums, gross_sums = process_tires_data(
+                                df,
+                                names_column='Primary Advisor Name',
+                                quantity_column='Actual Quantity',
+                                gross_column='Gross'
+                            )
+                            commodities_data[commodity] = {
+                                'actual_quantity_sums': actual_quantity_sums,
+                                'gross_sums': gross_sums
+                            }
                         else:
-                            df = pd.read_excel(commodities_files[commodity])
+                            df = pd.read_excel(commodities_files[commodity], header=0)  # Headers are on row 1
                             name_counts, parts_gross_sums = process_commodity_file(df)
                             commodities_data[commodity] = {
                                 'name_counts': name_counts,
@@ -583,7 +646,8 @@ def main():
                 st.success("Daily data updated successfully.")
                 time.sleep(delay_seconds)
 
-    # Optional: Adding the 'Input All' button for convenience
+    
+    # Inside the 'Input All' button handling
     if st.button("Input All"):
         # Process Menu Sales
         if menu_sales_file:
@@ -627,8 +691,20 @@ def main():
                         'parts_gross_sums': parts_gross_sums,
                         'labor_gross_sums': labor_gross_sums
                     }
+                elif commodity == 'Tires':
+                    df = pd.read_excel(commodities_files[commodity], header=0)  # Headers on row 1
+                    actual_quantity_sums, gross_sums = process_tires_data(
+                        df,
+                        names_column='Primary Advisor Name',
+                        quantity_column='Actual Quantity',
+                        gross_column='Gross'
+                    )
+                    commodities_data[commodity] = {
+                        'actual_quantity_sums': actual_quantity_sums,
+                        'gross_sums': gross_sums
+                    }
                 else:
-                    df = pd.read_excel(commodities_files[commodity])
+                    df = pd.read_excel(commodities_files[commodity], header=0)
                     name_counts, parts_gross_sums = process_commodity_file(df)
                     commodities_data[commodity] = {
                         'name_counts': name_counts,
@@ -675,5 +751,6 @@ def main():
             time.sleep(delay_seconds)
 
         st.success("All data updated successfully.")
+        
 if __name__ == "__main__":
     main()
