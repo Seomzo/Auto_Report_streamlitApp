@@ -371,7 +371,7 @@ def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodi
             labor_gross_sums = data.get('labor_gross_sums', {}) if commodity == 'Alignments' else {}
 
         for advisor_name, start_row in advisor_mapping.items():
-            base_row = start_row + commodity_row_offsets[commodity] - 1  # Adjust for zero-based indexing
+            base_row = start_row + commodity_row_offsets[commodity] - 1  
 
             if commodity == 'Tires':
                 # Update Actual Quantity
@@ -414,11 +414,11 @@ def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodi
         cells_to_update.append(cell_parts_gross)
 
     # Debug: Print out the cells being updated
-    for cell in cells_to_update:
-        st.write(f"Updating cell ({cell.row}, {cell.col}): {cell.value}")
+    #for cell in cells_to_update:
+        # st.write(f"Updating cell ({cell.row}, {cell.col}): {cell.value}")
 
-    if cells_to_update:
-        sheet.update_cells(cells_to_update)
+    #if cells_to_update:
+        #sheet.update_cells(cells_to_update)
 
 def main():
     set_bg_color()
@@ -452,7 +452,7 @@ def main():
         unsafe_allow_html=True
     )
 
-    sheet_name = st.text_input("Enter the Google Sheet name:", "August Advisor Performance-OMAR")
+    sheet_name = st.text_input("Enter the Google Sheet name:", "GOOGLE SHEET NAME")
     worksheet_name = st.text_input("Enter the Worksheet (tab) name:", "Input")
 
     # File uploads for different sections
