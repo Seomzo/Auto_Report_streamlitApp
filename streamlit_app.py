@@ -124,7 +124,7 @@ def process_alacarte_data(df, names_column):
     parts_gross_sums = df.groupby(names_column)['Opcode Parts Gross'].sum()
     return name_counts, labor_gross_sums, parts_gross_sums
 
-# def process_commodities_data(df, names_column="Primary Advisor Name"):
+def process_commodities_data(df, names_column="Primary Advisor Name"):
     #st.write("Available columns in Commodities data:", df.columns.tolist())
     df.columns = df.columns.str.strip()
     if names_column not in df.columns:
