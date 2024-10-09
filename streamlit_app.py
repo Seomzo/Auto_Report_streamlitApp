@@ -584,7 +584,7 @@ def main():
                                 'labor_gross_sums': labor_gross_sums
                             }
                         elif commodity == 'Tires':
-                            df = pd.read_excel(commodities_files[commodity], header=0)  # Headers are on row 1
+                            df = pd.read_excel(commodities_files[commodity], header=2)  # Headers are on row 1
                             actual_quantity_sums, gross_sums = process_tires_data(
                                 df,
                                 names_column='Primary Advisor Name',
