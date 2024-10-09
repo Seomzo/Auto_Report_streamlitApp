@@ -156,38 +156,55 @@ def process_commodity_file(df, names_column='Primary Advisor Name', gross_column
 
     return name_counts, parts_gross_sums
 
-def process_tires_data(df, names_column='Advisor Name (Group)', quantity_column='Part Count', gross_column='Gross'):
-  
+def process_tires_data(df):
+    """
+    Process Tires data by summing Actual Quantity and Gross per advisor.
+    Handles two formats based on column headers.
+    """
+    # Define column sets for both formats
+    original_format_columns = {'Primary Advisor Name', 'Actual Quantity', 'Gross'}
+    new_format_columns = {'Advisor Name (Group)', 'Part Count', 'Opcode Parts Gross'}
+
+    if original_format_columns.issubset(df.columns):
+        # Original Format
+        names_column = 'Primary Advisor Name'
+        quantity_column = 'Actual Quantity'
+        gross_column = 'Gross'
+        st.write("Detected Original Tires Format.")
+    elif new_format_columns.issubset(df.columns):
+        # New Format
+        names_column = 'Advisor Name (Group)'
+        quantity_column = 'Part Count'
+        gross_column = 'Opcode Parts Gross'
+        st.write("Detected GM Tires Format.")
+    else:
+        st.error("Tires Excel does not match any known format.")
+        return {}, {}
+
     # Normalize advisor names
     df[names_column] = df[names_column].astype(str).str.strip().str.upper()
-    
-    # Define required columns
-    required_columns = [names_column, quantity_column, gross_column]
-    
-    # Check if required columns exist
-    for col in required_columns:
-        if col not in df.columns:
-            st.error(f"Column '{col}' not found in the uploaded Tires Excel. Available columns: {df.columns.tolist()}")
-            return {}, {}
-    
+
     # Clean the 'Actual Quantity' and 'Gross' columns
-    df[quantity_column] = clean_column_data(df[quantity_column])
-    df[gross_column] = clean_column_data(df[gross_column])
-    
+    try:
+        df[quantity_column] = clean_column_data(df[quantity_column])
+        df[gross_column] = clean_column_data(df[gross_column])
+    except Exception as e:
+        st.error(f"Error cleaning columns: {e}")
+        return {}, {}
+
     # Sum Actual Quantity and Gross per advisor
     actual_quantity_sums = df.groupby(names_column)[quantity_column].sum().to_dict()
     gross_sums = df.groupby(names_column)[gross_column].sum().to_dict()
-    
+
     # Convert to native types
     actual_quantity_sums = {k: float(v) for k, v in actual_quantity_sums.items()}
     gross_sums = {k: float(v) for k, v in gross_sums.items()}
-    
+
     # Debug: Print the processed values
     # st.write("Tires Actual Quantity Sums:", actual_quantity_sums)
     # st.write("Tires Gross Sums:", gross_sums)
-    
-    return actual_quantity_sums, gross_sums
 
+    return actual_quantity_sums, gross_sums
 def process_alignment_file(df, names_column='Advisor Name'):
     df[names_column] = df[names_column].astype(str).str.strip().str.upper()
     
@@ -221,7 +238,8 @@ commodities_row_mapping = {
     'Fluids': 19,
     'Factory Chemicals': 20,
     'Labor Gross': 21, 
-    'Parts Gross': 22 }  
+    'Parts Gross': 22 
+    }  
 
 
 def process_recommendations_data(df, names_column="Name"):
@@ -334,7 +352,7 @@ def update_google_sheet(sheet, data_series1, *args, date_col_index, start_row_of
     if cells_to_update:
         sheet.update_cells(cells_to_update)
 
-def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodities_list, advisor_mapping):
+def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodities_list, advisor_mapping, data_row_offsets):
     cells_to_update = []
 
     # Define the row offsets for commodities within each advisor's block
@@ -352,8 +370,8 @@ def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodi
     }
 
     # Offsets for Labor Gross and Parts Gross
-    labor_gross_offset = 18  
-    parts_gross_offset = 19  
+    labor_gross_offset = data_row_offsets['Labor Gross']
+    parts_gross_offset = data_row_offsets['Parts Gross'] 
 
     # Initialize dictionaries to accumulate gross sums per advisor
     total_parts_gross_per_advisor = {advisor: 0 for advisor in advisor_mapping.keys()}
@@ -371,7 +389,7 @@ def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodi
             labor_gross_sums = data.get('labor_gross_sums', {}) if commodity == 'Alignments' else {}
 
         for advisor_name, start_row in advisor_mapping.items():
-            base_row = start_row + commodity_row_offsets[commodity] - 1  
+            base_row = start_row + commodity_row_offsets[commodity] - 1  # Adjust for zero-based indexing
 
             if commodity == 'Tires':
                 # Update Actual Quantity
@@ -414,11 +432,11 @@ def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodi
         cells_to_update.append(cell_parts_gross)
 
     # Debug: Print out the cells being updated
-    #for cell in cells_to_update:
-        # st.write(f"Updating cell ({cell.row}, {cell.col}): {cell.value}")
+    # for cell in cells_to_update:
+    #     st.write(f"Updating cell ({cell.row}, {cell.col}): {cell.value}")
 
-    #if cells_to_update:
-        #sheet.update_cells(cells_to_update)
+    if cells_to_update:
+        sheet.update_cells(cells_to_update)
 
 def main():
     set_bg_color()
@@ -519,8 +537,8 @@ def main():
         'A-la-carte Labor Gross': 6,
         'A-la-carte Parts Gross': 7,
         # Commodities are from row 2 to 11
-        'Labor Gross': 12,
-        'Parts Gross': 13,
+        'Labor Gross': 18,
+        'Parts Gross': 19,
         'Rec Count': 20,
         'Rec Sold Count': 21,
         'Rec Amount': 22,
@@ -567,6 +585,7 @@ def main():
                 st.success("A-La-Carte data updated successfully.")
                 time.sleep(delay_seconds)
 
+    # Inside the 'Update Commodities in Google Sheet' button handling
     with col3:
         if any(commodities_files.values()):
             if st.button("Update Commodities in Google Sheet"):
@@ -584,19 +603,29 @@ def main():
                                 'labor_gross_sums': labor_gross_sums
                             }
                         elif commodity == 'Tires':
-                            df = pd.read_excel(commodities_files[commodity], header=2)  # Headers are on row 1
-                            actual_quantity_sums, gross_sums = process_tires_data(
-                                df,
-                                names_column='Primary Advisor Name',
-                                quantity_column='Actual Quantity',
-                                gross_column='Gross'
-                            )
+                            # Attempt to read with header=0 (Original Format)
+                            try:
+                                df_original = pd.read_excel(commodities_files[commodity], header=0)
+                                if {'Primary Advisor Name', 'Actual Quantity', 'Gross'}.issubset(df_original.columns):
+                                    actual_quantity_sums, gross_sums = process_tires_data(df_original)
+                                else:
+                                    # Attempt to read with header=2 (New Format)
+                                    df_new = pd.read_excel(commodities_files[commodity], header=2)
+                                    if {'Advisor Name (Group)', 'Part Count', 'Opcode Parts Gross'}.issubset(df_new.columns):
+                                        actual_quantity_sums, gross_sums = process_tires_data(df_new)
+                                    else:
+                                        st.error(f"Tires Excel format not recognized for {commodity}.")
+                                        actual_quantity_sums, gross_sums = {}, {}
+                            except Exception as e:
+                                st.error(f"Error processing Tires Excel for {commodity}: {e}")
+                                actual_quantity_sums, gross_sums = {}, {}
+
                             commodities_data[commodity] = {
                                 'actual_quantity_sums': actual_quantity_sums,
                                 'gross_sums': gross_sums
                             }
                         else:
-                            df = pd.read_excel(commodities_files[commodity], header=0)  # Headers are on row 1
+                            df = pd.read_excel(commodities_files[commodity], header=0)
                             name_counts, parts_gross_sums = process_commodity_file(df)
                             commodities_data[commodity] = {
                                 'name_counts': name_counts,
@@ -607,11 +636,13 @@ def main():
                     date_col_index=date_col_index,
                     commodities_data=commodities_data,
                     commodities_list=commodities_list,
-                    advisor_mapping=advisor_mapping
+                    advisor_mapping=advisor_mapping,
+                    data_row_offsets=data_row_offsets  # Added this argument
+
                 )
                 st.success("Commodities data updated successfully.")
                 time.sleep(delay_seconds)
-
+    
     with col4:
         if recommendations_file is not None:
             if st.button("Update Recommendations in Google Sheet"):
@@ -692,13 +723,23 @@ def main():
                         'labor_gross_sums': labor_gross_sums
                     }
                 elif commodity == 'Tires':
-                    df = pd.read_excel(commodities_files[commodity], header=0)  # Headers on row 1
-                    actual_quantity_sums, gross_sums = process_tires_data(
-                        df,
-                        names_column='Advisor Name (Group)',
-                        quantity_column='Part Count',
-                        gross_column='Gross'
-                    )
+                    # Attempt to read with header=0 (Original Format)
+                    try:
+                        df_original = pd.read_excel(commodities_files[commodity], header=0)
+                        if {'Primary Advisor Name', 'Actual Quantity', 'Gross'}.issubset(df_original.columns):
+                            actual_quantity_sums, gross_sums = process_tires_data(df_original)
+                        else:
+                            # Attempt to read with header=2 (New Format)
+                            df_new = pd.read_excel(commodities_files[commodity], header=2)
+                            if {'Advisor Name (Group)', 'Part Count', 'Opcode Parts Gross'}.issubset(df_new.columns):
+                                actual_quantity_sums, gross_sums = process_tires_data(df_new)
+                            else:
+                                st.error(f"Tires Excel format not recognized for {commodity}.")
+                                actual_quantity_sums, gross_sums = {}, {}
+                    except Exception as e:
+                        st.error(f"Error processing Tires Excel for {commodity}: {e}")
+                        actual_quantity_sums, gross_sums = {}, {}
+
                     commodities_data[commodity] = {
                         'actual_quantity_sums': actual_quantity_sums,
                         'gross_sums': gross_sums
@@ -716,7 +757,9 @@ def main():
             date_col_index=date_col_index,
             commodities_data=commodities_data,
             commodities_list=commodities_list,
-            advisor_mapping=advisor_mapping
+            advisor_mapping=advisor_mapping,
+            data_row_offsets=data_row_offsets  # Added this argument
+
         )
         time.sleep(delay_seconds)
 
