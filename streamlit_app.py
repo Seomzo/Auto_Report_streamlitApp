@@ -156,7 +156,7 @@ def process_commodity_file(df, names_column='Primary Advisor Name', gross_column
 
     return name_counts, parts_gross_sums
 
-def process_tires_data(df, names_column='Primary Advisor Name', quantity_column='Actual Quantity', gross_column='Gross'):
+def process_tires_data(df, names_column='Advisor Name (Group)', quantity_column='Part Count', gross_column='Gross'):
   
     # Normalize advisor names
     df[names_column] = df[names_column].astype(str).str.strip().str.upper()
@@ -695,8 +695,8 @@ def main():
                     df = pd.read_excel(commodities_files[commodity], header=0)  # Headers on row 1
                     actual_quantity_sums, gross_sums = process_tires_data(
                         df,
-                        names_column='Primary Advisor Name',
-                        quantity_column='Actual Quantity',
+                        names_column='Advisor Name (Group)',
+                        quantity_column='Part Count',
                         gross_column='Gross'
                     )
                     commodities_data[commodity] = {
