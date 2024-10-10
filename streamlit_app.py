@@ -162,26 +162,26 @@ def process_tires_data(df):
     Handles two formats based on column headers.
     """
     # Standardize column names: lowercase and remove non-alphanumeric characters
-    df.columns = df.columns.str.strip().str.lower().str.replace('[^a-z0-9 ]', '', regex=True)
+    # df.columns = df.columns.str.strip().str.lower().str.replace('[^a-z0-9 ]', '', regex=True)
 
     # Define column sets for both formats with standardized names
-    original_format_columns = {'primary advisor name', 'actual quantity', 'gross'}
-    new_format_columns = {'advisor name group', 'part count', 'opcode parts gross'}
+    original_format_columns = {'Primary Advisor Name', 'Actual Quantity', 'Gross'}
+    new_format_columns = {'Advisor Name (Group)', 'Part Count', 'Opcode Parts Gross'}
 
     # Debug: Display the columns in the DataFrame
-    st.write("Columns in Tires Excel (standardized):", df.columns.tolist())
+    # st.write("Columns in Tires Excel (standardized):", df.columns.tolist())
 
     if original_format_columns.issubset(df.columns):
         # Original Format
-        names_column = 'primary advisor name'
-        quantity_column = 'actual quantity'
-        gross_column = 'gross'
+        names_column = 'Primary Advisor Name'
+        quantity_column = 'Actual Quantity'
+        gross_column = 'Gross'
         st.write("Detected Original Tires Format.")
     elif new_format_columns.issubset(df.columns):
         # New Format
-        names_column = 'advisor name group'
-        quantity_column = 'part count'
-        gross_column = 'opcode parts gross'
+        names_column = 'Advisor Name (Group)'
+        quantity_column = 'Part Count'
+        gross_column = 'Opcode Parts Gross'
         st.write("Detected GM Tires Format.")
     else:
         st.error("Tires Excel does not match any known format.")
@@ -212,25 +212,32 @@ def process_tires_data(df):
 
     return actual_quantity_sums, gross_sums
 
-def process_alignment_file(df, names_column='Advisor Name'):
-    df[names_column] = df[names_column].astype(str).str.strip().str.upper()
+def process_alignment_files(df_menus, df_alacarte, names_column='Advisor Name'):
+    """
+    Process Alignment data from both Menus and A-La-Carte Excel files by summing their values per advisor.
+    """
+    # Concatenate both DataFrames
+    combined_df = pd.concat([df_menus, df_alacarte], ignore_index=True)
     
+    # Normalize advisor names
+    combined_df[names_column] = combined_df[names_column].astype(str).str.strip().str.upper()
     
-    df['Opcode Parts Gross'] = clean_column_data(df['Opcode Parts Gross'])
-    df['Opcode Labor Gross'] = clean_column_data(df['Opcode Labor Gross'])
-
+    # Clean the 'Opcode Labor Gross' and 'Opcode Parts Gross' columns
+    combined_df['Opcode Labor Gross'] = clean_column_data(combined_df['Opcode Labor Gross'])
+    combined_df['Opcode Parts Gross'] = clean_column_data(combined_df['Opcode Parts Gross'])
+    
     # Count the number of sales per advisor
-    name_counts = df[names_column].value_counts() / 2  
-
+    name_counts = combined_df[names_column].value_counts() / 2  # Assuming you need to divide by 2 as in your original function
+    
     # Sum gross amounts per advisor
-    parts_gross_sums = df.groupby(names_column)['Opcode Parts Gross'].sum()
-    labor_gross_sums = df.groupby(names_column)['Opcode Labor Gross'].sum()
-
+    parts_gross_sums = combined_df.groupby(names_column)['Opcode Parts Gross'].sum()
+    labor_gross_sums = combined_df.groupby(names_column)['Opcode Labor Gross'].sum()
+    
     # Convert to dictionaries
     name_counts = name_counts.to_dict()
     parts_gross_sums = parts_gross_sums.to_dict()
     labor_gross_sums = labor_gross_sums.to_dict()
-
+    
     return name_counts, parts_gross_sums, labor_gross_sums
 
 commodities_row_mapping = {
@@ -369,7 +376,7 @@ def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodi
         'Batteries': 10,
         'Tires': 11,
         'Brakes': 12,
-        'Alignments': 13,
+        'Alignments': 13,       
         'Wipers': 14,
         'Belts': 15,
         'Fluids': 16,
@@ -396,7 +403,7 @@ def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodi
             labor_gross_sums = data.get('labor_gross_sums', {}) if commodity == 'Alignments' else {}
 
         for advisor_name, start_row in advisor_mapping.items():
-            base_row = start_row + commodity_row_offsets[commodity] - 1  # Adjust for zero-based indexing
+            base_row = start_row + commodity_row_offsets[commodity] - 1  # Adjust for one-based indexing
 
             if commodity == 'Tires':
                 # Update Actual Quantity
@@ -437,10 +444,6 @@ def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodi
         parts_gross_row = start_row + parts_gross_offset - 1
         cell_parts_gross = Cell(row=parts_gross_row, col=date_col_index, value=parts_gross)
         cells_to_update.append(cell_parts_gross)
-
-    # Debug: Print out the cells being updated
-    # for cell in cells_to_update:
-    #     st.write(f"Updating cell ({cell.row}, {cell.col}): {cell.value}")
 
     if cells_to_update:
         sheet.update_cells(cells_to_update)
@@ -483,23 +486,25 @@ def main():
     # File uploads for different sections
     menu_sales_file = st.file_uploader("Upload Menu Sales Excel", type=["xlsx"])
     alacarte_file = st.file_uploader("Upload A-La-Carte Excel", type=["xlsx"])
-    # commodities_file = st.file_uploader("Upload Commodities Excel", type=["xlsx"])
-    
     recommendations_file = st.file_uploader("Upload Recommendations Excel", type=["xlsx"])
     daily_file = st.file_uploader("Upload Daily Data Excel", type=["xlsx"])
 
-    # In your main() function, under Commodities
+    # Upload Commodities Files
     st.subheader("Upload Commodities Files")
 
     commodities_list = [
         'Air Filters', 'Cabin Filters', 'Batteries', 'Tires', 'Brakes',
-        'Alignments', 'Wipers', 'Belts', 'Fluids', 'Factory Chemicals'
+        'Wipers', 'Belts', 'Fluids', 'Factory Chemicals'
     ]
     
     commodities_files = {}
     for commodity in commodities_list:
         key = f"commodity_{commodity}"
         commodities_files[commodity] = st.file_uploader(f"Upload {commodity} Excel", type=["xlsx"], key=key)
+
+    # Alignment Files Upload
+    alignment_menus_file = st.file_uploader("Upload Alignment Menus Excel", type=["xlsx"], key="alignment_menus")
+    alignment_alacarte_file = st.file_uploader("Upload Alignment A-La-Carte Excel", type=["xlsx"], key="alignment_alacarte")
 
     # Date input
     selected_date = st.date_input("Select the date:", datetime.now()).strftime('%d').lstrip('0')
@@ -532,7 +537,7 @@ def main():
         advisor_name = advisor_name.strip().upper()
         advisor_names.append(advisor_name)
         advisor_start_rows.append(row + idx)
-        idx += 26  # Assuming each advisor block has 27 rows (including empty row)
+        idx += 26  # Assuming each advisor block has 26 rows (including empty row)
     advisor_mapping = dict(zip(advisor_names, advisor_start_rows))
 
     # Define the row offsets for different data types within each advisor's block
@@ -554,13 +559,189 @@ def main():
         'Daily Parts Gross': 25,
     }
 
-
     # Creating horizontal layout for buttons
     col1, col2, col3, col4, col5 = st.columns(5)
 
     with col1:
         if menu_sales_file is not None:
             if st.button("Update Menu Sales in Google Sheet"):
+                try:
+                    df_menu_sales = pd.read_excel(menu_sales_file)
+                    menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
+                    update_google_sheet(
+                        sheet,
+                        menu_name_counts,
+                        menu_labor_gross_sums,
+                        menu_parts_gross_sums,
+                        date_col_index=date_col_index,
+                        start_row_offset=data_row_offsets['Menu Sales'] - 1,
+                        advisor_mapping=advisor_mapping
+                    )
+                    st.success("Menu Sales data updated successfully.")
+                except Exception as e:
+                    st.error(f"Error updating Menu Sales data: {e}")
+                time.sleep(delay_seconds)
+
+    with col2:
+        if alacarte_file is not None:
+            if st.button("Update A-La-Carte in Google Sheet"):
+                try:
+                    df_alacarte = pd.read_excel(alacarte_file)
+                    alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
+                    update_google_sheet(
+                        sheet,
+                        alacarte_name_counts,
+                        alacarte_labor_gross_sums,
+                        alacarte_parts_gross_sums,
+                        date_col_index=date_col_index,
+                        start_row_offset=data_row_offsets['A-la-carte Count'] - 1,
+                        advisor_mapping=advisor_mapping
+                    )
+                    st.success("A-La-Carte data updated successfully.")
+                except Exception as e:
+                    st.error(f"Error updating A-La-Carte data: {e}")
+                time.sleep(delay_seconds)
+
+    # Inside the 'Update Commodities in Google Sheet' section
+    with col3:
+        if any(commodities_files.values()) or alignment_menus_file or alignment_alacarte_file:
+            if st.button("Update Commodities in Google Sheet"):
+                # Collect commodities data
+                commodities_data = {}
+                
+                # Process each commodity
+                for commodity in commodities_list:
+                    if commodities_files[commodity] is not None:
+                        if commodity == 'Tires':
+                            try:
+                                # Attempt to read with original format (header=0)
+                                df = pd.read_excel(commodities_files[commodity], header=0)
+                                actual_quantity_sums, gross_sums = process_tires_data(df)
+                                commodities_data['Tires'] = {
+                                    'actual_quantity_sums': actual_quantity_sums,
+                                    'gross_sums': gross_sums
+                                }
+                                st.success(f"{commodity} data (Original Format) processed successfully.")
+                            except Exception as e:
+                                st.warning(f"Original format not detected for {commodity}. Trying GM Format.")
+                                try:
+                                    # Attempt to read with GM format (header=2)
+                                    df = pd.read_excel(commodities_files[commodity], header=2)
+                                    actual_quantity_sums, gross_sums = process_tires_data(df)
+                                    commodities_data['Tires'] = {
+                                        'actual_quantity_sums': actual_quantity_sums,
+                                        'gross_sums': gross_sums
+                                    }
+                                    st.success(f"{commodity} data (GM Format) processed successfully.")
+                                except Exception as e2:
+                                    st.error(f"Error processing {commodity} Excel file in both formats: {e2}")
+                                    commodities_data['Tires'] = {
+                                        'actual_quantity_sums': {},
+                                        'gross_sums': {}
+                                    }
+                        else:
+                            try:
+                                df = pd.read_excel(commodities_files[commodity], header=0)
+                                name_counts, parts_gross_sums = process_commodity_file(df)
+                                commodities_data[commodity] = {
+                                    'name_counts': name_counts,
+                                    'parts_gross_sums': parts_gross_sums
+                                }
+                                st.success(f"{commodity} data processed successfully.")
+                            except Exception as e:
+                                st.error(f"Error processing {commodity} Excel file: {e}")
+                                commodities_data[commodity] = {
+                                    'name_counts': {},
+                                    'parts_gross_sums': {}
+                                }
+                
+                # Process Alignments separately
+                if alignment_menus_file and alignment_alacarte_file:
+                    try:
+                        # Read both Alignment Excel files
+                        df_menus = pd.read_excel(alignment_menus_file, header=0)
+                        df_alacarte = pd.read_excel(alignment_alacarte_file, header=0)
+                        
+                        # Process combined Alignment data
+                        name_counts, parts_gross_sums, labor_gross_sums = process_alignment_files(df_menus, df_alacarte)
+                        
+                        commodities_data['Alignments'] = {
+                            'name_counts': name_counts,
+                            'parts_gross_sums': parts_gross_sums,
+                            'labor_gross_sums': labor_gross_sums
+                        }
+                        
+                        st.success("Alignments data from both files processed successfully.")
+                    except Exception as e:
+                        st.error(f"Error processing Alignments Excel files: {e}")
+                        commodities_data['Alignments'] = {
+                            'name_counts': {},
+                            'parts_gross_sums': {},
+                            'labor_gross_sums': {}
+                        }
+                else:
+                    if any([alignment_menus_file, alignment_alacarte_file]):
+                        st.error("Please upload both Alignment Menus and Alignment A-La-Carte Excel files.")
+                
+                # Update Commodities in Google Sheet
+                update_commodities_in_sheet(
+                    sheet,
+                    date_col_index=date_col_index,
+                    commodities_data=commodities_data,
+                    commodities_list=commodities_list + ['Alignments'],  # Include 'Alignments' for mapping
+                    advisor_mapping=advisor_mapping,
+                    data_row_offsets=data_row_offsets
+                )
+                st.success("Commodities data updated successfully.")
+                time.sleep(delay_seconds)
+                
+    with col4:
+        if recommendations_file is not None:
+            if st.button("Update Recommendations in Google Sheet"):
+                try:
+                    df_recommendations = pd.read_excel(recommendations_file)
+                    rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
+                    update_google_sheet(
+                        sheet,
+                        rec_count,
+                        rec_sold_count,
+                        rec_amount,
+                        rec_sold_amount,
+                        date_col_index=date_col_index,
+                        start_row_offset=data_row_offsets['Rec Count'] - 1,
+                        advisor_mapping=advisor_mapping
+                    )
+                    st.success("Recommendations data updated successfully.")
+                except Exception as e:
+                    st.error(f"Error updating Recommendations data: {e}")
+                time.sleep(delay_seconds)
+
+    with col5:
+        if daily_file is not None:
+            if st.button("Update Daily Data in Google Sheet"):
+                try:
+                    df_daily = pd.read_excel(daily_file)
+                    daily_labor_gross, daily_parts_gross = process_daily_data(df_daily, "Name")
+                    update_google_sheet(
+                        sheet,
+                        daily_labor_gross,
+                        daily_parts_gross,
+                        date_col_index=date_col_index,
+                        start_row_offset=data_row_offsets['Daily Labor Gross'] - 1,
+                        advisor_mapping=advisor_mapping
+                    )
+                    st.success("Daily data updated successfully.")
+                except Exception as e:
+                    st.error(f"Error updating Daily data: {e}")
+                time.sleep(delay_seconds)
+
+    
+    # Inside the 'Input All' button handling
+    # Inside the 'Input All' button handling
+    if st.button("Input All"):
+        # Process Menu Sales
+        if menu_sales_file:
+            try:
                 df_menu_sales = pd.read_excel(menu_sales_file)
                 menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
                 update_google_sheet(
@@ -573,11 +754,13 @@ def main():
                     advisor_mapping=advisor_mapping
                 )
                 st.success("Menu Sales data updated successfully.")
-                time.sleep(delay_seconds)
+            except Exception as e:
+                st.error(f"Error updating Menu Sales data: {e}")
+            time.sleep(delay_seconds)
 
-    with col2:
-        if alacarte_file is not None:
-            if st.button("Update A-La-Carte in Google Sheet"):
+        # Process A-La-Carte
+        if alacarte_file:
+            try:
                 df_alacarte = pd.read_excel(alacarte_file)
                 alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
                 update_google_sheet(
@@ -590,69 +773,100 @@ def main():
                     advisor_mapping=advisor_mapping
                 )
                 st.success("A-La-Carte data updated successfully.")
-                time.sleep(delay_seconds)
+            except Exception as e:
+                st.error(f"Error updating A-La-Carte data: {e}")
+            time.sleep(delay_seconds)
 
-    # Inside the 'Update Commodities in Google Sheet' button handling
-    with col3:
-        if any(commodities_files.values()):
-            if st.button("Update Commodities in Google Sheet"):
-                # Collect commodities data
-                commodities_data = {}
-
-                for commodity in commodities_list:
-                    if commodities_files[commodity] is not None:
-                        if commodity == 'Alignments':
+        # Process Commodities and Alignments
+        commodities_data = {}
+        for commodity in commodities_list:
+            if commodities_files[commodity] is not None:
+                if commodity == 'Tires':
+                    try:
+                        # Attempt to read with original format (header=0)
+                        df = pd.read_excel(commodities_files[commodity], header=0)
+                        actual_quantity_sums, gross_sums = process_tires_data(df)
+                        commodities_data['Tires'] = {
+                            'actual_quantity_sums': actual_quantity_sums,
+                            'gross_sums': gross_sums
+                        }
+                        st.success(f"{commodity} data (Original Format) processed successfully.")
+                    except Exception as e:
+                        st.warning(f"Original format not detected for {commodity}. Trying GM Format.")
+                        try:
+                            # Attempt to read with GM format (header=2)
                             df = pd.read_excel(commodities_files[commodity], header=2)
-                            name_counts, parts_gross_sums, labor_gross_sums = process_alignment_file(df)
-                            commodities_data[commodity] = {
-                                'name_counts': name_counts,
-                                'parts_gross_sums': parts_gross_sums,
-                                'labor_gross_sums': labor_gross_sums
-                            }
-                        elif commodity == 'Tires':
-                            # Attempt to read with header=0 (Original Format)
-                            try:
-                                df_original = pd.read_excel(commodities_files[commodity], header=0)
-                                if {'Primary Advisor Name', 'Actual Quantity', 'Gross'}.issubset(df_original.columns):
-                                    actual_quantity_sums, gross_sums = process_tires_data(df_original)
-                                else:
-                                    # Attempt to read with header=2 (New Format)
-                                    df_new = pd.read_excel(commodities_files[commodity], header=2)
-                                    if {'Advisor Name (Group)', 'Part Count', 'Opcode Parts Gross'}.issubset(df_new.columns):
-                                        actual_quantity_sums, gross_sums = process_tires_data(df_new)
-                                    else:
-                                        st.error(f"Tires Excel format not recognized for {commodity}.")
-                                        actual_quantity_sums, gross_sums = {}, {}
-                            except Exception as e:
-                                st.error(f"Error processing Tires Excel for {commodity}: {e}")
-                                actual_quantity_sums, gross_sums = {}, {}
-
-                            commodities_data[commodity] = {
+                            actual_quantity_sums, gross_sums = process_tires_data(df)
+                            commodities_data['Tires'] = {
                                 'actual_quantity_sums': actual_quantity_sums,
                                 'gross_sums': gross_sums
                             }
-                        else:
-                            df = pd.read_excel(commodities_files[commodity], header=0)
-                            name_counts, parts_gross_sums = process_commodity_file(df)
-                            commodities_data[commodity] = {
-                                'name_counts': name_counts,
-                                'parts_gross_sums': parts_gross_sums
+                            st.success(f"{commodity} data (GM Format) processed successfully.")
+                        except Exception as e2:
+                            st.error(f"Error processing {commodity} Excel file in both formats: {e2}")
+                            commodities_data['Tires'] = {
+                                'actual_quantity_sums': {},
+                                'gross_sums': {}
                             }
-                update_commodities_in_sheet(
-                    sheet,
-                    date_col_index=date_col_index,
-                    commodities_data=commodities_data,
-                    commodities_list=commodities_list,
-                    advisor_mapping=advisor_mapping,
-                    data_row_offsets=data_row_offsets  # Added this argument
+                else:
+                    try:
+                        df = pd.read_excel(commodities_files[commodity], header=0)
+                        name_counts, parts_gross_sums = process_commodity_file(df)
+                        commodities_data[commodity] = {
+                            'name_counts': name_counts,
+                            'parts_gross_sums': parts_gross_sums
+                        }
+                        st.success(f"{commodity} data processed successfully.")
+                    except Exception as e:
+                        st.error(f"Error processing {commodity} Excel file: {e}")
+                        commodities_data[commodity] = {
+                            'name_counts': {},
+                            'parts_gross_sums': {}
+                        }
 
-                )
-                st.success("Commodities data updated successfully.")
-                time.sleep(delay_seconds)
-    
-    with col4:
-        if recommendations_file is not None:
-            if st.button("Update Recommendations in Google Sheet"):
+        # Process Alignments
+        if alignment_menus_file and alignment_alacarte_file:
+            try:
+                # Read both Alignment Excel files
+                df_menus = pd.read_excel(alignment_menus_file, header=0)
+                df_alacarte = pd.read_excel(alignment_alacarte_file, header=0)
+                
+                # Process combined Alignment data
+                name_counts, parts_gross_sums, labor_gross_sums = process_alignment_files(df_menus, df_alacarte)
+                
+                commodities_data['Alignments'] = {
+                    'name_counts': name_counts,
+                    'parts_gross_sums': parts_gross_sums,
+                    'labor_gross_sums': labor_gross_sums
+                }
+                
+                st.success("Alignments data from both files processed successfully.")
+            except Exception as e:
+                st.error(f"Error processing Alignments Excel files: {e}")
+                commodities_data['Alignments'] = {
+                    'name_counts': {},
+                    'parts_gross_sums': {},
+                    'labor_gross_sums': {}
+                }
+        else:
+            if any([alignment_menus_file, alignment_alacarte_file]):
+                st.error("Please upload both Alignment Menus and Alignment A-La-Carte Excel files.")
+
+        # Update Commodities in Google Sheet
+        update_commodities_in_sheet(
+            sheet,
+            date_col_index=date_col_index,
+            commodities_data=commodities_data,
+            commodities_list=commodities_list + ['Alignments'],  # Include 'Alignments' for mapping
+            advisor_mapping=advisor_mapping,
+            data_row_offsets=data_row_offsets
+        )
+        st.success("Commodities data updated successfully.")
+        time.sleep(delay_seconds)
+
+        # Process Recommendations
+        if recommendations_file:
+            try:
                 df_recommendations = pd.read_excel(recommendations_file)
                 rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
                 update_google_sheet(
@@ -666,11 +880,13 @@ def main():
                     advisor_mapping=advisor_mapping
                 )
                 st.success("Recommendations data updated successfully.")
-                time.sleep(delay_seconds)
+            except Exception as e:
+                st.error(f"Error updating Recommendations data: {e}")
+            time.sleep(delay_seconds)
 
-    with col5:
-        if daily_file is not None:
-            if st.button("Update Daily Data in Google Sheet"):
+        # Process Daily Data
+        if daily_file:
+            try:
                 df_daily = pd.read_excel(daily_file)
                 daily_labor_gross, daily_parts_gross = process_daily_data(df_daily, "Name")
                 update_google_sheet(
@@ -682,125 +898,11 @@ def main():
                     advisor_mapping=advisor_mapping
                 )
                 st.success("Daily data updated successfully.")
-                time.sleep(delay_seconds)
-
-    
-    # Inside the 'Input All' button handling
-    if st.button("Input All"):
-        # Process Menu Sales
-        if menu_sales_file:
-            df_menu_sales = pd.read_excel(menu_sales_file)
-            menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
-            update_google_sheet(
-                sheet,
-                menu_name_counts,
-                menu_labor_gross_sums,
-                menu_parts_gross_sums,
-                date_col_index=date_col_index,
-                start_row_offset=data_row_offsets['Menu Sales'] - 1,
-                advisor_mapping=advisor_mapping
-            )
-            time.sleep(delay_seconds)
-
-        # Process A-La-Carte
-        if alacarte_file:
-            df_alacarte = pd.read_excel(alacarte_file)
-            alacarte_name_counts, alacarte_labor_gross_sums, alacarte_parts_gross_sums = process_alacarte_data(df_alacarte, "Advisor Name")
-            update_google_sheet(
-                sheet,
-                alacarte_name_counts,
-                alacarte_labor_gross_sums,
-                alacarte_parts_gross_sums,
-                date_col_index=date_col_index,
-                start_row_offset=data_row_offsets['A-la-carte Count'] - 1,
-                advisor_mapping=advisor_mapping
-            )
-            time.sleep(delay_seconds)
-
-        # Process Commodities and Alignments
-        commodities_data = {}
-        for commodity in commodities_list:
-            if commodities_files[commodity] is not None:
-                if commodity == 'Alignments':
-                    df = pd.read_excel(commodities_files[commodity], header=2)
-                    name_counts, parts_gross_sums, labor_gross_sums = process_alignment_file(df)
-                    commodities_data[commodity] = {
-                        'name_counts': name_counts,
-                        'parts_gross_sums': parts_gross_sums,
-                        'labor_gross_sums': labor_gross_sums
-                    }
-                elif commodity == 'Tires':
-                    # Attempt to read with header=0 (Original Format)
-                    try:
-                        df_original = pd.read_excel(commodities_files[commodity], header=0)
-                        if {'Primary Advisor Name', 'Actual Quantity', 'Gross'}.issubset(df_original.columns):
-                            actual_quantity_sums, gross_sums = process_tires_data(df_original)
-                        else:
-                            # Attempt to read with header=2 (New Format)
-                            df_new = pd.read_excel(commodities_files[commodity], header=2)
-                            if {'Advisor Name (Group)', 'Part Count', 'Opcode Parts Gross'}.issubset(df_new.columns):
-                                actual_quantity_sums, gross_sums = process_tires_data(df_new)
-                            else:
-                                st.error(f"Tires Excel format not recognized for {commodity}.")
-                                actual_quantity_sums, gross_sums = {}, {}
-                    except Exception as e:
-                        st.error(f"Error processing Tires Excel for {commodity}: {e}")
-                        actual_quantity_sums, gross_sums = {}, {}
-
-                    commodities_data[commodity] = {
-                        'actual_quantity_sums': actual_quantity_sums,
-                        'gross_sums': gross_sums
-                    }
-                else:
-                    df = pd.read_excel(commodities_files[commodity], header=0)
-                    name_counts, parts_gross_sums = process_commodity_file(df)
-                    commodities_data[commodity] = {
-                        'name_counts': name_counts,
-                        'parts_gross_sums': parts_gross_sums
-                    }
-        # Update Commodities in Google Sheet
-        update_commodities_in_sheet(
-            sheet,
-            date_col_index=date_col_index,
-            commodities_data=commodities_data,
-            commodities_list=commodities_list,
-            advisor_mapping=advisor_mapping,
-            data_row_offsets=data_row_offsets  # Added this argument
-
-        )
-        time.sleep(delay_seconds)
-
-        # Process Recommendations
-        if recommendations_file:
-            df_recommendations = pd.read_excel(recommendations_file)
-            rec_count, rec_sold_count, rec_amount, rec_sold_amount = process_recommendations_data(df_recommendations, "Name")
-            update_google_sheet(
-                sheet,
-                rec_count,
-                rec_sold_count,
-                rec_amount,
-                rec_sold_amount,
-                date_col_index=date_col_index,
-                start_row_offset=data_row_offsets['Rec Count'] - 1,
-                advisor_mapping=advisor_mapping
-            )
-            time.sleep(delay_seconds)
-
-        # Process Daily Data
-        if daily_file:
-            df_daily = pd.read_excel(daily_file)
-            daily_labor_gross, daily_parts_gross = process_daily_data(df_daily, "Name")
-            update_google_sheet(
-                sheet,
-                daily_labor_gross,
-                daily_parts_gross,
-                date_col_index=date_col_index,
-                start_row_offset=data_row_offsets['Daily Labor Gross'] - 1,
-                advisor_mapping=advisor_mapping
-            )
+            except Exception as e:
+                st.error(f"Error updating Daily data: {e}")
             time.sleep(delay_seconds)
 
         st.success("All data updated successfully.")
-        
+
 if __name__ == "__main__":
     main()
