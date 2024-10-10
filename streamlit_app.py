@@ -161,21 +161,27 @@ def process_tires_data(df):
     Process Tires data by summing Actual Quantity and Gross per advisor.
     Handles two formats based on column headers.
     """
-    # Define column sets for both formats
-    original_format_columns = {'Primary Advisor Name', 'Actual Quantity', 'Gross'}
-    new_format_columns = {'Advisor Name (Group)', 'Part Count', 'Opcode Parts Gross'}
+    # Standardize column names: lowercase and remove non-alphanumeric characters
+    df.columns = df.columns.str.strip().str.lower().str.replace('[^a-z0-9 ]', '', regex=True)
+
+    # Define column sets for both formats with standardized names
+    original_format_columns = {'primary advisor name', 'actual quantity', 'gross'}
+    new_format_columns = {'advisor name group', 'part count', 'opcode parts gross'}
+
+    # Debug: Display the columns in the DataFrame
+    st.write("Columns in Tires Excel (standardized):", df.columns.tolist())
 
     if original_format_columns.issubset(df.columns):
         # Original Format
-        names_column = 'Primary Advisor Name'
-        quantity_column = 'Actual Quantity'
-        gross_column = 'Gross'
+        names_column = 'primary advisor name'
+        quantity_column = 'actual quantity'
+        gross_column = 'gross'
         st.write("Detected Original Tires Format.")
     elif new_format_columns.issubset(df.columns):
         # New Format
-        names_column = 'Advisor Name (Group)'
-        quantity_column = 'Part Count'
-        gross_column = 'Opcode Parts Gross'
+        names_column = 'advisor name group'
+        quantity_column = 'part count'
+        gross_column = 'opcode parts gross'
         st.write("Detected GM Tires Format.")
     else:
         st.error("Tires Excel does not match any known format.")
@@ -201,10 +207,11 @@ def process_tires_data(df):
     gross_sums = {k: float(v) for k, v in gross_sums.items()}
 
     # Debug: Print the processed values
-    st.write("Tires Actual Quantity Sums:", actual_quantity_sums)
-    st.write("Tires Gross Sums:", gross_sums)
+    # st.write("Tires Actual Quantity Sums:", actual_quantity_sums)
+    # st.write("Tires Gross Sums:", gross_sums)
 
     return actual_quantity_sums, gross_sums
+
 def process_alignment_file(df, names_column='Advisor Name'):
     df[names_column] = df[names_column].astype(str).str.strip().str.upper()
     
@@ -536,7 +543,7 @@ def main():
         'A-la-carte Count': 5,
         'A-la-carte Labor Gross': 6,
         'A-la-carte Parts Gross': 7,
-        # Commodities are from row 2 to 11
+        # Commodities are from row 8 to 17
         'Labor Gross': 18,
         'Parts Gross': 19,
         'Rec Count': 20,
