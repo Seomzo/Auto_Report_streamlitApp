@@ -201,8 +201,8 @@ def process_tires_data(df):
     gross_sums = {k: float(v) for k, v in gross_sums.items()}
 
     # Debug: Print the processed values
-    # st.write("Tires Actual Quantity Sums:", actual_quantity_sums)
-    # st.write("Tires Gross Sums:", gross_sums)
+    st.write("Tires Actual Quantity Sums:", actual_quantity_sums)
+    st.write("Tires Gross Sums:", gross_sums)
 
     return actual_quantity_sums, gross_sums
 def process_alignment_file(df, names_column='Advisor Name'):
