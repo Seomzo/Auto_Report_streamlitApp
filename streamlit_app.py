@@ -2,14 +2,11 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from gspread_formatting import CellFormat, format_cell_range
 from gspread.cell import Cell
 from datetime import datetime
 import warnings
 import time
 import numpy as np
-
-
 
 # Suppress UserWarning related to openpyxl's default style
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
@@ -102,9 +99,7 @@ def connect_to_google_sheet(sheet_name, worksheet_name):
 def clean_column_data(column):
     """Clean column data by removing non-numeric characters and converting to float."""
     # Remove dollar signs, commas, and any spaces
-    column = column.replace('[\$,]', '', regex=True).replace(',', '', regex=True).astype(float)
-    return column
-
+    return column.replace('[\$,]', '', regex=True).replace(',', '', regex=True).astype(float)
 
 def process_menu_sales_data(df, names_column):
     df[names_column] = df[names_column].str.strip().str.upper()
@@ -125,7 +120,6 @@ def process_alacarte_data(df, names_column):
     return name_counts, labor_gross_sums, parts_gross_sums
 
 def process_commodities_data(df, names_column="Primary Advisor Name"):
-    #st.write("Available columns in Commodities data:", df.columns.tolist())
     df.columns = df.columns.str.strip()
     if names_column not in df.columns:
         st.error(f"Column '{names_column}' not found in the uploaded Commodities Excel. Please check the column names.")
@@ -159,44 +153,47 @@ def process_commodity_file(df, names_column='Primary Advisor Name', gross_column
 def process_tires_data(df):
     """
     Process Tires data by summing Actual Quantity and Gross per advisor.
-    Handles two formats based on column headers.
+    Handles Original and GM formats based on column headers.
     """
-    # Standardize column names: lowercase and remove non-alphanumeric characters
-    # df.columns = df.columns.str.strip().str.lower().str.replace('[^a-z0-9 ]', '', regex=True)
+    # st.write("Preview of Tires Data:")
+    # st.write(df.head())
 
-    # Define column sets for both formats with standardized names
-    original_format_columns = {'Primary Advisor Name', 'Actual Quantity', 'Gross'}
-    new_format_columns = {'Advisor Name (Group)', 'Part Count', 'Opcode Parts Gross'}
+    # st.write("Columns in Tires Excel:")
+    # st.write(df.columns.tolist())
 
-    # Debug: Display the columns in the DataFrame
-    # st.write("Columns in Tires Excel (standardized):", df.columns.tolist())
+    # Initialize column variables
+    names_column = None
+    quantity_column = None
+    gross_column = None
 
-    if original_format_columns.issubset(df.columns):
-        # Original Format
-        names_column = 'Primary Advisor Name'
-        quantity_column = 'Actual Quantity'
-        gross_column = 'Gross'
-        st.write("Detected Original Tires Format.")
-    elif new_format_columns.issubset(df.columns):
-        # New Format
-        names_column = 'Advisor Name (Group)'
-        quantity_column = 'Part Count'
-        gross_column = 'Opcode Parts Gross'
-        st.write("Detected GM Tires Format.")
+    # Identify columns based on keywords
+    for col in df.columns:
+        col_lower = col.lower()
+        if 'advisor' in col_lower and 'name' in col_lower:
+            names_column = col
+        elif 'part count' in col_lower or 'actual quantity' in col_lower:
+            quantity_column = col
+        elif 'opcode parts gross' in col_lower or 'gross' in col_lower:
+            gross_column = col
+
+    # Check if all required columns are found
+    if names_column and quantity_column and gross_column:
+        if 'advisor name group' in names_column.lower():
+            st.write("Detected GM Tires Format.")
+        else:
+            st.write("Detected Original Tires Format.")
     else:
-        st.error("Tires Excel does not match any known format.")
-        return {}, {}
+        raise ValueError("Tires Excel does not match any known format.")
 
     # Normalize advisor names
     df[names_column] = df[names_column].astype(str).str.strip().str.upper()
 
-    # Clean the 'Actual Quantity' and 'Gross' columns
+    # Clean the 'Quantity' and 'Gross' columns
     try:
         df[quantity_column] = clean_column_data(df[quantity_column])
         df[gross_column] = clean_column_data(df[gross_column])
     except Exception as e:
-        st.error(f"Error cleaning columns: {e}")
-        return {}, {}
+        raise ValueError(f"Error cleaning columns: {e}")
 
     # Sum Actual Quantity and Gross per advisor
     actual_quantity_sums = df.groupby(names_column)[quantity_column].sum().to_dict()
@@ -206,38 +203,74 @@ def process_tires_data(df):
     actual_quantity_sums = {k: float(v) for k, v in actual_quantity_sums.items()}
     gross_sums = {k: float(v) for k, v in gross_sums.items()}
 
-    # Debug: Print the processed values
     # st.write("Tires Actual Quantity Sums:", actual_quantity_sums)
     # st.write("Tires Gross Sums:", gross_sums)
 
     return actual_quantity_sums, gross_sums
 
+def process_tires_gm_format(file):
+    """
+    Process the GM Format Tires Excel file.
+    Skips the first two rows and uses the third row as headers.
+    """
+    try:
+        # Read the Excel file by skipping the first two rows
+        df = pd.read_excel(file, skiprows=2, header=0)
+        actual_quantity_sums, gross_sums = process_tires_data(df)
+        return actual_quantity_sums, gross_sums
+    except Exception as e:
+        raise ValueError(f"Error processing GM Format Tires Excel file: {e}")
+
+def preprocess_gm_excel(file):
+    """
+    Preprocess the GM Excel file to ensure correct structure.
+    Removes irrelevant rows and handles merged cells.
+    """
+    # Read the Excel file without specifying header
+    df = pd.read_excel(file, header=None)
+
+    # Drop the first two rows which contain summary data
+    df = df.drop([0, 1]).reset_index(drop=True)
+
+    # Assign the third row as header
+    new_header = df.iloc[0]
+    df = df[1:]
+    df.columns = new_header
+
+    # Drop any completely empty columns
+    df = df.dropna(axis=1, how='all')
+
+    return df
+
 def process_alignment_files(df_menus, df_alacarte, names_column='Advisor Name'):
     """
-    Process Alignment data from both Menus and A-La-Carte Excel files by summing their values per advisor.
+    Process Alignment data by combining menus and a-la-carte data.
     """
     # Concatenate both DataFrames
     combined_df = pd.concat([df_menus, df_alacarte], ignore_index=True)
-    
+
     # Normalize advisor names
     combined_df[names_column] = combined_df[names_column].astype(str).str.strip().str.upper()
-    
+
     # Clean the 'Opcode Labor Gross' and 'Opcode Parts Gross' columns
-    combined_df['Opcode Labor Gross'] = clean_column_data(combined_df['Opcode Labor Gross'])
-    combined_df['Opcode Parts Gross'] = clean_column_data(combined_df['Opcode Parts Gross'])
-    
+    try:
+        combined_df['Opcode Labor Gross'] = clean_column_data(combined_df['Opcode Labor Gross'])
+        combined_df['Opcode Parts Gross'] = clean_column_data(combined_df['Opcode Parts Gross'])
+    except Exception as e:
+        raise ValueError(f"Error cleaning columns in Alignment data: {e}")
+
     # Count the number of sales per advisor
     name_counts = combined_df[names_column].value_counts() / 2  # Assuming you need to divide by 2 as in your original function
-    
+
     # Sum gross amounts per advisor
     parts_gross_sums = combined_df.groupby(names_column)['Opcode Parts Gross'].sum()
     labor_gross_sums = combined_df.groupby(names_column)['Opcode Labor Gross'].sum()
-    
+
     # Convert to dictionaries
     name_counts = name_counts.to_dict()
     parts_gross_sums = parts_gross_sums.to_dict()
     labor_gross_sums = labor_gross_sums.to_dict()
-    
+
     return name_counts, parts_gross_sums, labor_gross_sums
 
 commodities_row_mapping = {
@@ -253,49 +286,49 @@ commodities_row_mapping = {
     'Factory Chemicals': 20,
     'Labor Gross': 21, 
     'Parts Gross': 22 
-    }  
-
+}
 
 def process_recommendations_data(df, names_column="Name"):
-    # Display available columns for debugging
-    #st.write("Available columns in Recommendations data:", df.columns.tolist())
-    
+    """
+    Process Recommendations data by summing recommendations and amounts.
+    """
     # Ensure no leading/trailing spaces in column names
     df.columns = df.columns.str.strip()
-    
+
     # Filter out rows where the advisor name is "Total"
     df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
-    
+
     # Check if the required column exists
     if names_column not in df.columns:
-        st.error(f"Column '{names_column}' not found in the uploaded Recommendations Excel. Please check the column names.")
-        return pd.Series(dtype='int'), pd.Series(dtype='int'), pd.Series(dtype='float'), pd.Series(dtype='float')  # Return empty Series if column not found
+        raise ValueError(f"Column '{names_column}' not found in the uploaded Recommendations Excel. Please check the column names.")
 
     # Normalize the advisor names
     df[names_column] = df[names_column].str.strip().str.upper()  # Normalize to uppercase and strip spaces
-    
+
     # Ensure the necessary columns exist
     required_columns = ['Recommendations', 'Recommendations Sold', 'Recommendations $ amount', 'Recommendations Sold $ amount']
     for col in required_columns:
         if col not in df.columns:
-            st.error(f"Column '{col}' not found in the uploaded Recommendations Excel. Please check the column names.")
-            return pd.Series(dtype='int'), pd.Series(dtype='int'), pd.Series(dtype='float'), pd.Series(dtype='float')
-    
+            raise ValueError(f"Column '{col}' not found in the uploaded Recommendations Excel. Please check the column names.")
+
     # Clean and process data
     rec_count = df.groupby(names_column)['Recommendations'].sum()
     rec_sold_count = df.groupby(names_column)['Recommendations Sold'].sum()
     rec_amount = clean_column_data(df.groupby(names_column)['Recommendations $ amount'].sum())
     rec_sold_amount = clean_column_data(df.groupby(names_column)['Recommendations Sold $ amount'].sum())
-    
+
     return rec_count, rec_sold_count, rec_amount, rec_sold_amount
 
 def process_daily_data(df, names_column="Name"):
+    """
+    Process Daily Data by summing Labor and Parts Gross per advisor.
+    """
     # Ensure no leading/trailing spaces in column names
     df.columns = df.columns.str.strip()
-    
+
     # Filter out rows where the advisor name is "Total"
     df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
-    
+
     # Filter in rows where the pay type is "ALL"
     df = df[df['Pay Type'].str.upper() == "ALL"]
 
@@ -306,8 +339,7 @@ def process_daily_data(df, names_column="Name"):
     required_columns = ['Labor Gross', 'Parts Gross']
     for col in required_columns:
         if col not in df.columns:
-            st.error(f"Column '{col}' not found in the uploaded Daily Data Excel. Please check the column names.")
-            return pd.Series(dtype='float'), pd.Series(dtype='float')
+            raise ValueError(f"Column '{col}' not found in the uploaded Daily Data Excel. Please check the column names.")
 
     # Clean and process data
     df['Labor Gross'] = clean_column_data(df['Labor Gross'])
@@ -317,20 +349,16 @@ def process_daily_data(df, names_column="Name"):
     labor_gross_sums = df.groupby(names_column)['Labor Gross'].sum()  # Sum to check for any duplicates
     parts_gross_sums = df.groupby(names_column)['Parts Gross'].sum()
 
-    # # Debug: Print the processed values
-    # st.write("Processed Labor Gross Sums:", labor_gross_sums)
-    # st.write("Processed Parts Gross Sums:", parts_gross_sums)
-
     return labor_gross_sums, parts_gross_sums
 
 def convert_to_native_type(value):
     """
-    Convert NumPy and Pandas data types to native Python types.
+    Convert value to its native Python type.
     """
     if isinstance(value, pd.Series):
         value = value.sum()
     if pd.isna(value):
-        return 0  # Or None, depending on how you want to handle NaNs
+        return 0
     elif isinstance(value, (np.integer, np.int64, np.int32, int)):
         return int(value)
     elif isinstance(value, (np.floating, np.float64, np.float32, float)):
@@ -343,6 +371,9 @@ def convert_to_native_type(value):
         return str(value)
 
 def update_google_sheet(sheet, data_series1, *args, date_col_index, start_row_offset, advisor_mapping):
+    """
+    Update Google Sheet with provided data series.
+    """
     cells_to_update = []
 
     for advisor_name, start_row in advisor_mapping.items():
@@ -367,6 +398,9 @@ def update_google_sheet(sheet, data_series1, *args, date_col_index, start_row_of
         sheet.update_cells(cells_to_update)
 
 def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodities_list, advisor_mapping, data_row_offsets):
+    """
+    Update Commodities data in Google Sheet.
+    """
     cells_to_update = []
 
     # Define the row offsets for commodities within each advisor's block
@@ -480,7 +514,8 @@ def main():
         unsafe_allow_html=True
     )
 
-    sheet_name = st.text_input("Enter the Google Sheet name:", "GOOGLE SHEET NAME")
+    # Pre-fill with default sheet name if desired
+    sheet_name = st.text_input("Enter the Google Sheet name:", "BLANK Advisor Performance Omar")
     worksheet_name = st.text_input("Enter the Worksheet (tab) name:", "Input")
 
     # File uploads for different sections
@@ -602,7 +637,6 @@ def main():
                     st.error(f"Error updating A-La-Carte data: {e}")
                 time.sleep(delay_seconds)
 
-    # Inside the 'Update Commodities in Google Sheet' section
     with col3:
         if any(commodities_files.values()) or alignment_menus_file or alignment_alacarte_file:
             if st.button("Update Commodities in Google Sheet"):
@@ -625,9 +659,8 @@ def main():
                             except Exception as e:
                                 st.warning(f"Original format not detected for {commodity}. Trying GM Format.")
                                 try:
-                                    # Attempt to read with GM format (header=2)
-                                    df = pd.read_excel(commodities_files[commodity], header=2)
-                                    actual_quantity_sums, gross_sums = process_tires_data(df)
+                                    # Attempt to read with GM format (skip first two rows, header=0)
+                                    actual_quantity_sums, gross_sums = process_tires_gm_format(commodities_files[commodity])
                                     commodities_data['Tires'] = {
                                         'actual_quantity_sums': actual_quantity_sums,
                                         'gross_sums': gross_sums
@@ -684,17 +717,20 @@ def main():
                         st.error("Please upload both Alignment Menus and Alignment A-La-Carte Excel files.")
                 
                 # Update Commodities in Google Sheet
-                update_commodities_in_sheet(
-                    sheet,
-                    date_col_index=date_col_index,
-                    commodities_data=commodities_data,
-                    commodities_list=commodities_list + ['Alignments'],  # Include 'Alignments' for mapping
-                    advisor_mapping=advisor_mapping,
-                    data_row_offsets=data_row_offsets
-                )
-                st.success("Commodities data updated successfully.")
+                try:
+                    update_commodities_in_sheet(
+                        sheet,
+                        date_col_index=date_col_index,
+                        commodities_data=commodities_data,
+                        commodities_list=commodities_list + ['Alignments'],  # Include 'Alignments' for mapping
+                        advisor_mapping=advisor_mapping,
+                        data_row_offsets=data_row_offsets
+                    )
+                    st.success("Commodities data updated successfully.")
+                except Exception as e:
+                    st.error(f"Error updating Commodities data: {e}")
                 time.sleep(delay_seconds)
-                
+
     with col4:
         if recommendations_file is not None:
             if st.button("Update Recommendations in Google Sheet"):
@@ -735,9 +771,7 @@ def main():
                     st.error(f"Error updating Daily data: {e}")
                 time.sleep(delay_seconds)
 
-    
-    # Inside the 'Input All' button handling
-    # Inside the 'Input All' button handling
+    # Handling 'Input All' button
     if st.button("Input All"):
         # Process Menu Sales
         if menu_sales_file:
@@ -794,9 +828,8 @@ def main():
                     except Exception as e:
                         st.warning(f"Original format not detected for {commodity}. Trying GM Format.")
                         try:
-                            # Attempt to read with GM format (header=2)
-                            df = pd.read_excel(commodities_files[commodity], header=2)
-                            actual_quantity_sums, gross_sums = process_tires_data(df)
+                            # Attempt to read with GM format (skip first two rows, header=0)
+                            actual_quantity_sums, gross_sums = process_tires_gm_format(commodities_files[commodity])
                             commodities_data['Tires'] = {
                                 'actual_quantity_sums': actual_quantity_sums,
                                 'gross_sums': gross_sums
@@ -853,15 +886,18 @@ def main():
                 st.error("Please upload both Alignment Menus and Alignment A-La-Carte Excel files.")
 
         # Update Commodities in Google Sheet
-        update_commodities_in_sheet(
-            sheet,
-            date_col_index=date_col_index,
-            commodities_data=commodities_data,
-            commodities_list=commodities_list + ['Alignments'],  # Include 'Alignments' for mapping
-            advisor_mapping=advisor_mapping,
-            data_row_offsets=data_row_offsets
-        )
-        st.success("Commodities data updated successfully.")
+        try:
+            update_commodities_in_sheet(
+                sheet,
+                date_col_index=date_col_index,
+                commodities_data=commodities_data,
+                commodities_list=commodities_list + ['Alignments'],  # Include 'Alignments' for mapping
+                advisor_mapping=advisor_mapping,
+                data_row_offsets=data_row_offsets
+            )
+            st.success("Commodities data updated successfully.")
+        except Exception as e:
+            st.error(f"Error updating Commodities data: {e}")
         time.sleep(delay_seconds)
 
         # Process Recommendations
