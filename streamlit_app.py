@@ -139,15 +139,52 @@ def process_commodity_file(df, names_column='Primary Advisor Name', gross_column
     parts_gross_sums = parts_gross_sums.to_dict()
     return name_counts, parts_gross_sums
 
-def process_tires_data(df, names_column='Advisor Name', quantity_column='Actual Quantity', gross_column='Gross'):
-    df[names_column] = df[names_column].str.strip().str.upper()
-    df[quantity_column] = clean_column_data(df[quantity_column])
-    df[gross_column] = clean_column_data(df[gross_column])
+# --- Reverting to old Tires logic ---
+def process_tires_data(df):
+    """
+    Old working version for Tires data:
+    Detect columns for advisor, quantity, and gross.
+    """
+    names_column = None
+    quantity_column = None
+    gross_column = None
+
+    for col in df.columns:
+        col_lower = col.lower()
+        if 'advisor' in col_lower and 'name' in col_lower:
+            names_column = col
+        elif 'part count' in col_lower or 'actual quantity' in col_lower:
+            quantity_column = col
+        elif 'opcode parts gross' in col_lower or 'gross' in col_lower:
+            gross_column = col
+
+    if names_column and quantity_column and gross_column:
+        if 'advisor name group' in names_column.lower():
+            st.write("Detected GM Tires Format.")
+        else:
+            st.write("Detected Original Tires Format.")
+    else:
+        raise ValueError("Tires Excel does not match any known format.")
+
+    df[names_column] = df[names_column].astype(str).str.strip().str.upper()
+
+    try:
+        df[quantity_column] = clean_column_data(df[quantity_column])
+        df[gross_column] = clean_column_data(df[gross_column])
+    except Exception as e:
+        raise ValueError(f"Error cleaning columns: {e}")
+
     actual_quantity_sums = df.groupby(names_column)[quantity_column].sum().to_dict()
     gross_sums = df.groupby(names_column)[gross_column].sum().to_dict()
+
+    actual_quantity_sums = {k: float(v) for k, v in actual_quantity_sums.items()}
+    gross_sums = {k: float(v) for k, v in gross_sums.items()}
     return actual_quantity_sums, gross_sums
 
 def process_tires_gm_format(file):
+    """
+    Old working version for GM Format Tires processing.
+    """
     try:
         df = pd.read_excel(file, skiprows=2, header=0)
         actual_quantity_sums, gross_sums = process_tires_data(df)
@@ -155,15 +192,22 @@ def process_tires_gm_format(file):
     except Exception as e:
         raise ValueError(f"Error processing GM Format Tires Excel file: {e}")
 
+# --- Reverting to old Alignment logic ---
 def process_alignment_files(df_menus, df_alacarte, names_column='Advisor Name'):
+    """
+    Old working version for Alignment:
+    The old code divided by 2 to avoid doubling counts.
+    """
     combined_df = pd.concat([df_menus, df_alacarte], ignore_index=True)
-    combined_df[names_column] = combined_df[names_column].str.strip().str.upper()
+    combined_df[names_column] = combined_df[names_column].astype(str).str.strip().str.upper()
     try:
         combined_df['Opcode Labor Gross'] = clean_column_data(combined_df['Opcode Labor Gross'])
         combined_df['Opcode Parts Gross'] = clean_column_data(combined_df['Opcode Parts Gross'])
     except Exception as e:
         raise ValueError(f"Error cleaning columns in Alignment data: {e}")
-    name_counts = combined_df[names_column].value_counts().to_dict()
+
+    # Old logic: divide name_counts by 2 to avoid double counting
+    name_counts = (combined_df[names_column].value_counts() / 2).to_dict()
     parts_gross_sums = combined_df.groupby(names_column)['Opcode Parts Gross'].sum().to_dict()
     labor_gross_sums = combined_df.groupby(names_column)['Opcode Labor Gross'].sum().to_dict()
     return name_counts, parts_gross_sums, labor_gross_sums
