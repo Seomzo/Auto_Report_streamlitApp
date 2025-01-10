@@ -112,6 +112,7 @@ def convert_to_native_type(value):
     else:
         return str(value)
 
+
 def process_menu_sales_data(df, names_column='Advisor Name'):
     df[names_column] = df[names_column].str.strip().str.upper()
     df['Opcode Labor Gross'] = clean_column_data(df['Opcode Labor Gross'])
@@ -139,7 +140,7 @@ def process_commodity_file(df, names_column='Primary Advisor Name', gross_column
     parts_gross_sums = parts_gross_sums.to_dict()
     return name_counts, parts_gross_sums
 
-# ----------------------- OLD TIRES LOGIC -----------------------
+#    TIRES
 def process_tires_data(df):
     names_column = None
     quantity_column = None
@@ -185,40 +186,21 @@ def process_tires_gm_format(file):
     except Exception as e:
         raise ValueError(f"Error processing GM Format Tires Excel file: {e}")
 
-# ---------------------- OLD ALIGNMENT LOGIC --------------------
-def process_alignment_files(df_menus, df_alacarte, names_column='Advisor Name'):
-    combined_df = pd.concat([df_menus, df_alacarte], ignore_index=True)
-    combined_df[names_column] = combined_df[names_column].astype(str).str.strip().str.upper()
-    try:
-        combined_df['Opcode Labor Gross'] = clean_column_data(combined_df['Opcode Labor Gross'])
-        combined_df['Opcode Parts Gross'] = clean_column_data(combined_df['Opcode Parts Gross'])
-    except Exception as e:
-        raise ValueError(f"Error cleaning columns in Alignment data: {e}")
-
-    # Old logic: dividing name_counts by 2 to avoid double counting
-    name_counts = (combined_df[names_column].value_counts() / 2).to_dict()
-    parts_gross_sums = combined_df.groupby(names_column)['Opcode Parts Gross'].sum().to_dict()
-    labor_gross_sums = combined_df.groupby(names_column)['Opcode Labor Gross'].sum().to_dict()
-    return name_counts, parts_gross_sums, labor_gross_sums
-
-# --------------------- NEW MENUS LOGIC: WHEEL ALIGNMENT --------
-def process_alignment_menus_new_format(df, advisor_col='Advisor Name', story_col='Operation Tech Story'):
-    """
-    This function parses the new 'Alignment Menus' Excel, 
-    looking for the phrase 'wheel alignment' in the Operation Tech Story.
-    """
+#    ALIGNMENT MENUS & A-LA-CARTE: NEW WHEEL ALIGNMENT
+def process_alignment_new_format(df, advisor_col='Advisor Name', story_col='Operation Tech Story'):
+   
     df[advisor_col] = df[advisor_col].astype(str).str.strip().str.upper()
     alignment_counts = {}
     for _, row in df.iterrows():
         advisor = row[advisor_col]
-        # Lowercase so we can search for "wheel alignment" case-insensitively
         story_text = str(row.get(story_col, "")).lower()
         if "wheel alignment" in story_text:
             alignment_counts[advisor] = alignment_counts.get(advisor, 0) + 1
 
-    # We'll only have name_counts. No labor/parts in this new approach.
-    return alignment_counts, {}, {}
+    # Return just name_counts; no parts/labor
+    return alignment_counts
 
+#  RECOMMENDATIONS / DAILY / RO COUNT
 def process_recommendations_data(df, names_column="Name"):
     df.columns = df.columns.str.strip()
     df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
@@ -259,6 +241,8 @@ def process_ro_count_data(df, advisor_column='Advisor Name', ro_number_column='R
     ro_counts = unique_ro.groupby(advisor_column)[ro_number_column].nunique().to_dict()
     return ro_counts
 
+#   SHEET UPDATE UTILITIES
+
 def update_google_sheet(sheet, data_series1, *args, date_col_index, start_row_offset, advisor_mapping):
     cells_to_update = []
     for advisor_name, start_row in advisor_mapping.items():
@@ -296,6 +280,7 @@ def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodi
     parts_gross_offset = data_row_offsets['Parts Gross'] 
     total_parts_gross_per_advisor = {advisor: 0 for advisor in advisor_mapping.keys()}
     total_labor_gross_per_advisor = {advisor: 0 for advisor in advisor_mapping.keys()}
+
     for commodity in commodities_list:
         data = commodities_data.get(commodity, {})
         if commodity == 'Tires':
@@ -315,18 +300,19 @@ def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodi
                 gross = convert_to_native_type(gross_sums.get(advisor_name, 0))
                 total_parts_gross_per_advisor[advisor_name] += gross
             else:
+                
                 count_value = convert_to_native_type(name_counts.get(advisor_name, 0))
                 cell_count = Cell(row=base_row, col=date_col_index, value=count_value)
                 cells_to_update.setdefault(advisor_name, []).append(cell_count)
                 parts_gross_value = convert_to_native_type(parts_gross_sums.get(advisor_name, 0))
                 total_parts_gross_per_advisor[advisor_name] += parts_gross_value
 
-                # If alignments, we may have labor sums from old logic:
+                
                 if commodity == 'Alignments':
                     labor_gross_value = convert_to_native_type(labor_gross_sums.get(advisor_name, 0))
                     total_labor_gross_per_advisor[advisor_name] += labor_gross_value
 
-    # Now fill in the "Labor Gross" and "Parts Gross" rows for each advisor
+    # Add final labor/parts totals
     for advisor_name, start_row in advisor_mapping.items():
         labor_gross = total_labor_gross_per_advisor.get(advisor_name, 0)
         labor_gross_row = start_row + labor_gross_offset - 1
@@ -348,9 +334,10 @@ def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodi
         except Exception as e:
             st.error(f"Failed to update Commodities in Google Sheet: {e}")
 
+# MAIN
 def main():
     set_bg_color()
-    delay_seconds = 0.01 
+    delay_seconds = 0.01
     st.title("Google Sheet Updater for Advisors")
 
     st.markdown(
@@ -385,40 +372,43 @@ def main():
 
     st.subheader("Upload Excel Files")
 
+    # ---- RO Count
     st.markdown("#### **Upload RO Count Excel**")
     ro_count_file = st.file_uploader("Select RO Count Excel file", type=["xlsx"], key="ro_count", label_visibility="hidden")
 
+    # ---- Menu Sales
     st.markdown("#### **Upload Menu Sales Excel**")
     menu_sales_file = st.file_uploader("Upload Menu Sales Excel", type=["xlsx"], key="menu_sales_file", label_visibility="hidden")
 
+    # ---- A-La-Carte
     st.markdown("#### **Upload A-La-Carte Excel**")
     alacarte_file = st.file_uploader("Upload A-La-Carte Excel", type=["xlsx"], key="alacarte_file", label_visibility="hidden")
 
+    # ---- Recommendations
     st.markdown("#### **Upload Recommendations Excel**")
     recommendations_file = st.file_uploader("Upload Recommendations Excel", type=["xlsx"], key="recommendations_file", label_visibility="hidden")
 
+    # ---- Daily Data
     st.markdown("#### **Upload Daily Data Excel**")
     daily_file = st.file_uploader("Upload Daily Data Excel", type=["xlsx"], key="daily_file", label_visibility="hidden")
 
-    # -------------- Commodities Files --------------
+    # -------------- Commodities --------------
     st.markdown("### **Upload Commodities Files**")
-
     commodities_list = [
         'Air Filters', 'Cabin Filters', 'Batteries', 'Tires', 'Brakes',
         'Wipers', 'Belts', 'Fluids', 'Factory Chemicals'
     ]
-    
     commodities_files = {}
     for commodity in commodities_list:
         key = f"commodity_{commodity.replace(' ', '_').lower()}"
         commodities_files[commodity] = st.file_uploader(f"Upload {commodity} Excel", type=["xlsx"], key=key)
 
-    # -------------- Alignment Files --------------
+    # -------------- Alignment --------------
     st.markdown("### **Upload Alignment Files**")
     alignment_menus_file = st.file_uploader("Upload Alignment Menus Excel", type=["xlsx"], key="alignment_menus")
     alignment_alacarte_file = st.file_uploader("Upload Alignment A-La-Carte Excel", type=["xlsx"], key="alignment_alacarte")
 
-    # -------------- Date Input --------------
+    # -------------- Date Selection --------------
     selected_date = st.date_input("Select the date:", datetime.now(), key="selected_date").strftime('%d').lstrip('0')
 
     # -------------- Connect to Google Sheet --------------
@@ -472,7 +462,7 @@ def main():
     # -------------- Buttons Layout --------------
     col1, col2, col3, col4, col5, col6 = st.columns(6)
 
-    # ----- Update RO Count -----
+    # -------------- RO Count --------------
     with col1:
         if ro_count_file is not None:
             if st.button("Update RO Count in Google Sheet", key="update_ro_count"):
@@ -491,7 +481,7 @@ def main():
                     st.error(f"Error updating RO Count data: {e}")
                 time.sleep(delay_seconds)
 
-    # ----- Update Menu Sales -----
+    # -------------- Menu Sales --------------
     with col2:
         if menu_sales_file is not None:
             if st.button("Update Menu Sales in Google Sheet", key="update_menu_sales"):
@@ -512,7 +502,7 @@ def main():
                     st.error(f"Error updating Menu Sales data: {e}")
                 time.sleep(delay_seconds)
 
-    # ----- Update A-La-Carte -----
+    # -------------- A-La-Carte --------------
     with col3:
         if alacarte_file is not None:
             if st.button("Update A-La-Carte in Google Sheet", key="update_alacarte"):
@@ -533,13 +523,13 @@ def main():
                     st.error(f"Error updating A-La-Carte data: {e}")
                 time.sleep(delay_seconds)
 
-    # ----- Update Commodities -----
+    # -------------- Commodities (including Alignments) --------------
     with col4:
         if any(commodities_files.values()) or alignment_menus_file or alignment_alacarte_file:
             if st.button("Update Commodities in Google Sheet", key="update_commodities"):
                 commodities_data = {}
 
-                # ~~~~~ Process Commodities ~~~~~
+                # --- Process Each Commodity ---
                 for commodity in commodities_list:
                     if commodities_files[commodity] is not None:
                         if commodity == 'Tires':
@@ -581,60 +571,47 @@ def main():
                                     'parts_gross_sums': {}
                                 }
 
-                # ~~~~~ Process Alignments ~~~~~
-                # We'll combine the new "Alignment Menus" approach with old "A-La-Carte" approach
-                alignment_menus_counts = {}
-                alignment_alacarte_counts = {}
-                alignment_alacarte_parts = {}
-                alignment_alacarte_labor = {}
+                alignment_counts_menus = {}
+                alignment_counts_alacarte = {}
 
-                # 1) If alignment menus file is uploaded => NEW logic
-                if alignment_menus_file is not None:
+                if alignment_menus_file:
                     try:
                         df_menus_new = pd.read_excel(alignment_menus_file, header=0)
-                        # EXAMPLE: 'Advisor Name' / 'Operation Tech Story' => Adjust if different
-                        alignment_menus_counts, _, _ = process_alignment_menus_new_format(
+                        alignment_counts_menus = process_alignment_new_format(
                             df_menus_new,
                             advisor_col="Advisor Name",
                             story_col="Operation Tech Story"
                         )
-                        st.success("Alignment Menus (New Format) processed successfully.")
+                        st.success("Alignment Menus (New Wheel Alignment Logic) processed successfully.")
                     except Exception as e:
                         st.error(f"Error processing new-format Alignment Menus: {e}")
 
-                # 2) If alignment a-la-carte file is uploaded => OLD logic
-                if alignment_alacarte_file is not None:
+                if alignment_alacarte_file:
                     try:
                         df_alacarte_align = pd.read_excel(alignment_alacarte_file, header=0)
-                        # We pretend there's no "menus" DF for old logic => pass empty
-                        df_menus_empty = pd.DataFrame()
-                        alignment_alacarte_counts, alignment_alacarte_parts, alignment_alacarte_labor = process_alignment_files(
-                            df_menus_empty,
+                        alignment_counts_alacarte = process_alignment_new_format(
                             df_alacarte_align,
-                            names_column="Advisor Name"
+                            advisor_col="Advisor Name",
+                            story_col="Operation Tech Story"
                         )
-                        st.success("Alignment A-La-Carte (Old Logic) processed successfully.")
+                        st.success("Alignment A-La-Carte (New Wheel Alignment Logic) processed successfully.")
                     except Exception as e:
-                        st.error(f"Error processing old-format Alignment A-La-Carte: {e}")
+                        st.error(f"Error processing new-format Alignment A-La-Carte: {e}")
 
-                # 3) Merge the two sets into final
+                # Combine
                 final_align_counts = {}
-                for adv, c in alignment_menus_counts.items():
+                for adv, c in alignment_counts_menus.items():
                     final_align_counts[adv] = final_align_counts.get(adv, 0) + c
-                for adv, c in alignment_alacarte_counts.items():
+                for adv, c in alignment_counts_alacarte.items():
                     final_align_counts[adv] = final_align_counts.get(adv, 0) + c
 
-                final_align_parts = alignment_alacarte_parts
-                final_align_labor = alignment_alacarte_labor
-
-                # 4) Put them into commodities_data['Alignments']
                 commodities_data['Alignments'] = {
                     'name_counts': final_align_counts,
-                    'parts_gross_sums': final_align_parts,
-                    'labor_gross_sums': final_align_labor
+                    'parts_gross_sums': {},
+                    'labor_gross_sums': {}
                 }
 
-                # ~~~~~ Update in Google Sheet ~~~~~
+                # Update in Google Sheet
                 try:
                     update_commodities_in_sheet(
                         sheet,
@@ -649,7 +626,7 @@ def main():
                     st.error(f"Error updating Commodities data: {e}")
                 time.sleep(delay_seconds)
 
-    # ----- Update Recommendations -----
+    # -------------- Recommendations --------------
     with col5:
         if recommendations_file is not None:
             if st.button("Update Recommendations in Google Sheet", key="update_recommendations"):
@@ -671,7 +648,7 @@ def main():
                     st.error(f"Error updating Recommendations data: {e}")
                 time.sleep(delay_seconds)
 
-    # ----- Update Daily Data -----
+    # -------------- Daily Data --------------
     with col6:
         if daily_file is not None:
             if st.button("Update Daily Data in Google Sheet", key="update_daily_data"):
@@ -695,7 +672,7 @@ def main():
     if st.button("Input All", key="input_all"):
         updated_sections = []
 
-        # ---------- A) RO Count ----------
+        # ---------- RO Count ----------
         if ro_count_file:
             try:
                 df_ro_count = pd.read_excel(ro_count_file)
@@ -713,7 +690,7 @@ def main():
                 st.error(f"Error updating RO Count data: {e}")
             time.sleep(delay_seconds)
 
-        # ---------- B) Menu Sales ----------
+        # ---------- Menu Sales ----------
         if menu_sales_file:
             try:
                 df_menu_sales = pd.read_excel(menu_sales_file)
@@ -733,7 +710,7 @@ def main():
                 st.error(f"Error updating Menu Sales data: {e}")
             time.sleep(delay_seconds)
 
-        # ---------- C) A-La-Carte ----------
+        # ---------- A-La-Carte ----------
         if alacarte_file:
             try:
                 df_alacarte = pd.read_excel(alacarte_file)
@@ -753,10 +730,9 @@ def main():
                 st.error(f"Error updating A-La-Carte data: {e}")
             time.sleep(delay_seconds)
 
-        # ---------- D) Commodities + Alignments ----------
+        # ---------- Commodities & Alignments ----------
         commodities_data = {}
-
-        # 1) Normal Commodities
+        # Normal Commodities
         for commodity in commodities_list:
             if commodities_files[commodity] is not None:
                 if commodity == 'Tires':
@@ -801,57 +777,49 @@ def main():
                             'parts_gross_sums': {}
                         }
 
-        # 2) Alignments
-        alignment_menus_counts = {}
-        alignment_alacarte_counts = {}
-        alignment_alacarte_parts = {}
-        alignment_alacarte_labor = {}
+        # Alignments with new logic for both
+        alignment_counts_menus = {}
+        alignment_counts_alacarte = {}
 
-        # If alignment menus file => new logic
+        # Menus => new
         if alignment_menus_file:
             try:
                 df_menus_new = pd.read_excel(alignment_menus_file, header=0)
-                alignment_menus_counts, _, _ = process_alignment_menus_new_format(
+                alignment_counts_menus = process_alignment_new_format(
                     df_menus_new,
                     advisor_col="Advisor Name",
                     story_col="Operation Tech Story"
                 )
-                st.success("Alignment Menus (New Format) processed successfully.")
+                st.success("Alignment Menus (New Wheel Alignment Logic) processed successfully.")
             except Exception as e:
                 st.error(f"Error processing new-format Alignment Menus: {e}")
 
-        # If alignment a-la-carte file => old logic
+        # A-La-Carte => new
         if alignment_alacarte_file:
             try:
                 df_alacarte_align = pd.read_excel(alignment_alacarte_file, header=0)
-                df_menus_empty = pd.DataFrame()
-                alignment_alacarte_counts, alignment_alacarte_parts, alignment_alacarte_labor = process_alignment_files(
-                    df_menus_empty,
+                alignment_counts_alacarte = process_alignment_new_format(
                     df_alacarte_align,
-                    names_column="Advisor Name"
+                    advisor_col="Advisor Name",
+                    story_col="Operation Tech Story"
                 )
-                st.success("Alignment A-La-Carte (Old Logic) processed successfully.")
+                st.success("Alignment A-La-Carte (New Wheel Alignment Logic) processed successfully.")
             except Exception as e:
-                st.error(f"Error processing old-format Alignment A-La-Carte: {e}")
+                st.error(f"Error processing new-format Alignment A-La-Carte: {e}")
 
-        # Merge new menus + old a-la-carte
         final_align_counts = {}
-        for adv, c in alignment_menus_counts.items():
+        for adv, c in alignment_counts_menus.items():
             final_align_counts[adv] = final_align_counts.get(adv, 0) + c
-        for adv, c in alignment_alacarte_counts.items():
+        for adv, c in alignment_counts_alacarte.items():
             final_align_counts[adv] = final_align_counts.get(adv, 0) + c
 
-        final_align_parts = alignment_alacarte_parts
-        final_align_labor = alignment_alacarte_labor
-
-        # Put them into 'Alignments'
         commodities_data['Alignments'] = {
             'name_counts': final_align_counts,
-            'parts_gross_sums': final_align_parts,
-            'labor_gross_sums': final_align_labor
+            'parts_gross_sums': {},
+            'labor_gross_sums': {}
         }
 
-        # Now update Commodities in Google Sheet
+        # Update once we have all
         if any(commodities_data.values()):
             try:
                 update_commodities_in_sheet(
@@ -868,7 +836,7 @@ def main():
                 st.error(f"Error updating Commodities data: {e}")
             time.sleep(delay_seconds)
 
-        # ---------- E) Recommendations ----------
+        # ---------- Recommendations ----------
         if recommendations_file:
             try:
                 df_recommendations = pd.read_excel(recommendations_file)
@@ -889,7 +857,7 @@ def main():
                 st.error(f"Error updating Recommendations data: {e}")
             time.sleep(delay_seconds)
 
-        # ---------- F) Daily Data ----------
+        # ---------- Daily Data ----------
         if daily_file:
             try:
                 df_daily = pd.read_excel(daily_file)
@@ -908,11 +876,11 @@ def main():
                 st.error(f"Error updating Daily data: {e}")
             time.sleep(delay_seconds)
 
-        # ---------- Final Success or Warning ----------
         if updated_sections:
             st.success(f"Updated the following sections successfully: {', '.join(updated_sections)}")
         else:
             st.warning("No data sections were updated. Please ensure you've uploaded the necessary Excel files.")
+
 
 if __name__ == "__main__":
     main()
