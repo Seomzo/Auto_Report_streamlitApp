@@ -654,7 +654,7 @@ def main():
             if st.button("Update Daily Data in Google Sheet", key="update_daily_data"):
                 try:
                     df_daily = pd.read_excel(daily_file)
-                    daily_labor_gross, daily_parts_gross = process_daily_data(df_daily, "Name")
+                    daily_labor_gross, daily_parts_gross = process_daily_data(df_daily, "Service Advisor")
                     update_google_sheet(
                         sheet,
                         daily_labor_gross,
@@ -861,7 +861,7 @@ def main():
         if daily_file:
             try:
                 df_daily = pd.read_excel(daily_file)
-                daily_labor_gross, daily_parts_gross = process_daily_data(df_daily, "Name")
+                daily_labor_gross, daily_parts_gross = process_daily_data(df_daily, "Service Advisor")
                 update_google_sheet(
                     sheet,
                     daily_labor_gross,
