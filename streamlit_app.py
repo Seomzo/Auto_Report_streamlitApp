@@ -218,7 +218,6 @@ def process_recommendations_data(df, names_column="Name"):
 def process_daily_data(df, names_column="Service Advisor"):
     df.columns = df.columns.str.strip()
     df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
-    df = df[df['Pay Type'].str.upper() == "ALL"]
     df[names_column] = df[names_column].str.strip().str.upper()
     required_columns = ['Labor Gross', 'Parts Gross']
     for col in required_columns:
