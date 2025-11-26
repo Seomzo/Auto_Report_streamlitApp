@@ -215,7 +215,7 @@ def process_recommendations_data(df, names_column="Name"):
     rec_sold_amount = clean_column_data(df.groupby(names_column)['Recommendations Sold $ amount'].sum()).to_dict()
     return rec_count, rec_sold_count, rec_amount, rec_sold_amount
 
-def process_daily_data(df, names_column="Name"):
+def process_daily_data(df, names_column="Service Advisor"):
     df.columns = df.columns.str.strip()
     df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
     df = df[df['Pay Type'].str.upper() == "ALL"]
