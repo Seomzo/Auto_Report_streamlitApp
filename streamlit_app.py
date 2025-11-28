@@ -215,9 +215,24 @@ def process_recommendations_data(df, names_column="Name"):
     rec_sold_amount = clean_column_data(df.groupby(names_column)['Recommendations Sold $ amount'].sum()).to_dict()
     return rec_count, rec_sold_count, rec_amount, rec_sold_amount
 
-def process_daily_data(df, names_column="Service Advisor"):
+def process_daily_data(df):
     df.columns = df.columns.str.strip()
-    df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
+    
+    # Auto-detect format: Old format has 'Name' and 'Pay Type', new format has 'Service Advisor'
+    if 'Name' in df.columns and 'Pay Type' in df.columns:
+        # Old format
+        names_column = 'Name'
+        df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
+        df = df[df['Pay Type'].str.upper() == "ALL"]
+        st.write("Detected Old Daily Data Format")
+    elif 'Service Advisor' in df.columns:
+        # New format
+        names_column = 'Service Advisor'
+        df = df[df[names_column].str.strip().str.upper() != "TOTAL"]
+        st.write("Detected New Advisor Preformance 3.0 format")
+    else:
+        raise ValueError("Daily Data Excel format not recognized. ")
+    
     df[names_column] = df[names_column].str.strip().str.upper()
     required_columns = ['Labor Gross', 'Parts Gross']
     for col in required_columns:
@@ -653,7 +668,7 @@ def main():
             if st.button("Update Daily Data in Google Sheet", key="update_daily_data"):
                 try:
                     df_daily = pd.read_excel(daily_file)
-                    daily_labor_gross, daily_parts_gross = process_daily_data(df_daily, "Service Advisor")
+                    daily_labor_gross, daily_parts_gross = process_daily_data(df_daily)
                     update_google_sheet(
                         sheet,
                         daily_labor_gross,
@@ -860,7 +875,7 @@ def main():
         if daily_file:
             try:
                 df_daily = pd.read_excel(daily_file)
-                daily_labor_gross, daily_parts_gross = process_daily_data(df_daily, "Service Advisor")
+                daily_labor_gross, daily_parts_gross = process_daily_data(df_daily)
                 update_google_sheet(
                     sheet,
                     daily_labor_gross,
