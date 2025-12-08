@@ -312,14 +312,35 @@ def process_employee_timecard_data(df):
     This file has a vertical layout with bi-weekly data for multiple technicians.
     
     Structure:
+    - Row 1 (index 0): Date range in columns H-L (e.g., "11/16/2025 - 11/30/2025")
     - Row 6 (index 5): First tech - Column A: Employee #, Column C: "Lastname, Firstname"
     - Row 7 (index 6): Headers (Date, ..., Paid)
     - Row 8+ (index 7+): Every 3 rows = 1 day (Date in Column A, Paid in Column K)
     - Next tech starts when we see another name in Column C
     
-    Returns: {employee_id_or_name: {day: {"attendance": hours, "objective": 8 or 0}}}
+    Returns: (date_range_tuple, {employee_id_or_name: {day: {"attendance": hours, "objective": 8 or 0}}})
     """
     timecard_data = {}
+    date_range = None
+    
+    # Extract date range from row 1 (index 0), columns H-L (indexes 7-11)
+    try:
+        row_1 = df.iloc[0]
+        # Look for date range string in columns H-L
+        for col_idx in range(7, 12):  # Columns H, I, J, K, L
+            if col_idx < len(row_1):
+                cell_value = str(row_1.iloc[col_idx]).strip()
+                if "-" in cell_value and "/" in cell_value:
+                    # Found date range like "11/16/2025 - 11/30/2025"
+                    parts = cell_value.split("-")
+                    if len(parts) == 2:
+                        start_date = pd.to_datetime(parts[0].strip(), errors='coerce')
+                        end_date = pd.to_datetime(parts[1].strip(), errors='coerce')
+                        if pd.notna(start_date) and pd.notna(end_date):
+                            date_range = (start_date, end_date)
+                            break
+    except Exception as e:
+        st.warning(f"Could not extract date range from row 1: {e}")
     
     # Iterate through rows to find tech sections
     current_tech_id = None
@@ -381,14 +402,16 @@ def process_employee_timecard_data(df):
     if current_tech_id and current_tech_data:
         timecard_data[current_tech_id] = current_tech_data
     
-    return timecard_data
+    return date_range, timecard_data
 
-def update_rth_timecard_data(sheet, timecard_data, tech_mapping_with_employee_id):
+def update_rth_timecard_data(sheet, date_range, timecard_data, tech_mapping_with_employee_id):
     """
-    Update RTH Google Sheet with Employee Timecard data for all days found in the file.
+    Update RTH Google Sheet with Employee Timecard data for all days in the date range.
+    Days without data will be set to 0.
     
     Args:
         sheet: Google Sheet object
+        date_range: Tuple of (start_date, end_date) from the timecard report
         timecard_data: {tech_id: {day: {"attendance": X, "objective": Y}}}
         tech_mapping_with_employee_id: {tech_id: start_row} or {tech_name: start_row}
     """
@@ -400,6 +423,16 @@ def update_rth_timecard_data(sheet, timecard_data, tech_mapping_with_employee_id
     for i, day_str in enumerate(date_row):
         if day_str.strip():
             day_to_col[day_str.strip()] = i + 5  # Column index (E=5, F=6, etc.)
+    
+    # Generate all days in the date range
+    all_days_in_range = []
+    if date_range:
+        start_date, end_date = date_range
+        current_date = start_date
+        while current_date <= end_date:
+            day_str = str(current_date.day)
+            all_days_in_range.append(day_str)
+            current_date += pd.Timedelta(days=1)
     
     for tech_id, days_data in timecard_data.items():
         # Try to find this tech in the Google Sheet mapping
@@ -420,20 +453,27 @@ def update_rth_timecard_data(sheet, timecard_data, tech_mapping_with_employee_id
             st.warning(f"Technician {tech_id} not found in Google Sheet. Skipping.")
             continue
         
-        # Update data for each day
-        for day, data in days_data.items():
+        # Update data for ALL days in the date range
+        for day in all_days_in_range:
             if day not in day_to_col:
                 continue
             
             date_col_index = day_to_col[day]
             
+            # Get data for this day, or use 0 if no data
+            if day in days_data:
+                attendance_value = convert_to_native_type(days_data[day]["attendance"])
+                objective_value = convert_to_native_type(days_data[day]["objective"])
+            else:
+                # No data for this day - set both to 0
+                attendance_value = 0
+                objective_value = 0
+            
             # Update Attendance Hours (row start_row + 0)
-            attendance_value = convert_to_native_type(data["attendance"])
             cell_attendance = Cell(row=start_row, col=date_col_index, value=attendance_value)
             cells_to_update.append(cell_attendance)
             
             # Update Daily Objective (row start_row + 3)
-            objective_value = convert_to_native_type(data["objective"])
             cell_objective = Cell(row=start_row + 3, col=date_col_index, value=objective_value)
             cells_to_update.append(cell_objective)
     
@@ -1186,9 +1226,15 @@ def main():
                         try:
                             # Read Employee Timecard - no header row since structure is vertical
                             df_timecard = pd.read_excel(timecard_report_file, header=None)
-                            timecard_data = process_employee_timecard_data(df_timecard)
+                            date_range, timecard_data = process_employee_timecard_data(df_timecard)
+                            
+                            if date_range:
+                                start_date, end_date = date_range
+                                st.info(f"Processing timecard data for date range: {start_date.strftime('%m/%d/%Y')} - {end_date.strftime('%m/%d/%Y')}")
+                            
                             update_rth_timecard_data(
                                 rth_sheet,
+                                date_range,
                                 timecard_data,
                                 tech_mapping_combined
                             )
