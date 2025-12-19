@@ -113,14 +113,20 @@ def convert_to_native_type(value):
         return str(value)
 
 
-def process_menu_sales_data(df, names_column='Advisor Name'):
+def process_menu_sales_data(df, names_column='Advisor Name', ro_number_column='RO Number'):
     df[names_column] = df[names_column].str.strip().str.upper()
     df['Opcode Labor Gross'] = clean_column_data(df['Opcode Labor Gross'])
     df['Opcode Parts Gross'] = clean_column_data(df['Opcode Parts Gross'])
-    name_counts = df[names_column].value_counts() / 2
+    
+    # Count unique RO Numbers per advisor
+    df = df.dropna(subset=[ro_number_column])
+    df[ro_number_column] = df[ro_number_column].astype(str).str.strip()
+    unique_ro = df.drop_duplicates(subset=[names_column, ro_number_column])
+    name_counts = unique_ro.groupby(names_column)[ro_number_column].nunique().to_dict()
+    
     labor_gross_sums = df.groupby(names_column)['Opcode Labor Gross'].sum().to_dict()
     parts_gross_sums = df.groupby(names_column)['Opcode Parts Gross'].sum().to_dict()
-    return name_counts.to_dict(), labor_gross_sums, parts_gross_sums
+    return name_counts, labor_gross_sums, parts_gross_sums
 
 def process_alacarte_data(df, names_column='Advisor Name'):
     df[names_column] = df[names_column].str.strip().str.upper()
@@ -736,7 +742,7 @@ def main():
                     if st.button("Update Menu Sales in Google Sheet", key="advisor_update_menu_sales"):
                         try:
                             df_menu_sales = pd.read_excel(menu_sales_file)
-                            menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
+                            menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name", "RO Number")
                             update_google_sheet(
                             sheet,
                             menu_name_counts,
@@ -943,7 +949,7 @@ def main():
                 if menu_sales_file:
                         try:
                             df_menu_sales = pd.read_excel(menu_sales_file)
-                            menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name")
+                            menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name", "RO Number")
                             update_google_sheet(
                                 sheet,
                                 menu_name_counts,
