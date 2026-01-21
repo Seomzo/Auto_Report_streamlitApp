@@ -490,6 +490,138 @@ def update_rth_timecard_data(sheet, date_range, timecard_data, tech_mapping_with
         except Exception as e:
             st.error(f"Failed to update Employee Timecard data in Google Sheet: {e}")
 
+#   APPOINTMENTS PROCESSING FUNCTIONS
+
+def process_appointments_data(df, is_volkswagen=False):
+    """
+    Process Appointments Excel file to extract appointments per advisor for all dates.
+    
+    Args:
+        df: DataFrame with columns Date, User, Role, Appointments, Cancelled
+        is_volkswagen: If True, sum all Pinnacle variations into "PINNACLE"
+    
+    Returns:
+        {day_str: {first_name: appointments_count}} - e.g., {"31": {"PINNACLE": 7, "MINNIE": 2}}
+    """
+    df.columns = df.columns.str.strip()
+    
+    # Validate required columns
+    required_columns = ['Date', 'User', 'Appointments']
+    for col in required_columns:
+        if col not in df.columns:
+            raise ValueError(f"Column '{col}' not found in the Appointments Excel. Available columns: {', '.join(df.columns)}")
+    
+    # Parse dates
+    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+    df = df.dropna(subset=['Date'])
+    
+    if df.empty:
+        st.warning("No valid dates found in the uploaded file.")
+        return {}
+    
+    # Extract day number from date
+    df['Day'] = df['Date'].dt.day.astype(str)
+    
+    # Clean and extract first names
+    df['User'] = df['User'].astype(str).str.strip()
+    df['FirstName'] = df['User'].str.split().str[0].str.upper()
+    
+    # Special handling for Volkswagen: sum all Pinnacle/Pinnacal variations
+    if is_volkswagen:
+        df['FirstName'] = df['FirstName'].apply(
+            lambda x: 'PINNACLE' if ('PINNACLE' in x or 'PINNACAL' in x) else x
+        )
+    
+    # Clean Appointments column
+    df['Appointments'] = pd.to_numeric(df['Appointments'], errors='coerce').fillna(0)
+    
+    # Group by day and first name, sum appointments
+    appointments_by_day = {}
+    for day, group in df.groupby('Day'):
+        day_appointments = group.groupby('FirstName')['Appointments'].sum().to_dict()
+        # Convert to native types
+        day_appointments = {k: convert_to_native_type(v) for k, v in day_appointments.items()}
+        appointments_by_day[day] = day_appointments
+    
+    # Get unique dates for display
+    unique_dates = df['Date'].dt.date.unique()
+    st.info(f"Found data for {len(unique_dates)} date(s): {', '.join(str(d) for d in sorted(unique_dates))}")
+    
+    return appointments_by_day
+
+def update_appointments_in_sheet(sheet, vw_data, toyota_data, alfa_data, advisor_mapping, update_vw=True, update_toyota=True, update_alfa=True):
+    """
+    Update Appointments Google Sheet with data from three brands for multiple days.
+    
+    Args:
+        sheet: Google Sheet object
+        vw_data: {day_str: {first_name: appointments}} for Volkswagen
+        toyota_data: {day_str: {first_name: appointments}} for Toyota
+        alfa_data: {day_str: {first_name: appointments}} for Alfa
+        advisor_mapping: {first_name: start_row} mapping
+        update_vw: Whether to update Volkswagen row (default True)
+        update_toyota: Whether to update Toyota row (default True)
+        update_alfa: Whether to update Alfa row (default True)
+    """
+    cells_to_update = []
+    
+    # Build day-to-column mapping from row 2
+    # Row 2: A=tech, B=empty, C=empty, D=1, E=2, F=3...
+    date_row = sheet.row_values(2)[3:]  # Skip first 3 columns (A, B, C)
+    day_to_col = {}
+    for i, day_str in enumerate(date_row):
+        if day_str.strip():
+            day_to_col[day_str.strip()] = i + 4  # Column index (D=4, E=5, etc.)
+    
+    # Collect all unique days from all brand data
+    all_days = set()
+    if update_vw and vw_data:
+        all_days.update(vw_data.keys())
+    if update_toyota and toyota_data:
+        all_days.update(toyota_data.keys())
+    if update_alfa and alfa_data:
+        all_days.update(alfa_data.keys())
+    
+    # For each day, update all advisors
+    for day in all_days:
+        if day not in day_to_col:
+            st.warning(f"Day {day} not found in Google Sheet columns. Skipping.")
+            continue
+        
+        date_col_index = day_to_col[day]
+        
+        for advisor_name, start_row in advisor_mapping.items():
+            # Row offsets for each brand:
+            # start_row + 0: Volkswagen
+            # start_row + 1: Toyota
+            # start_row + 2: Alfa
+            # start_row + 3: Daily Objective (not updated)
+            
+            # Update Volkswagen (row start_row + 0)
+            if update_vw and vw_data and day in vw_data:
+                vw_value = convert_to_native_type(vw_data[day].get(advisor_name, 0))
+                cell_vw = Cell(row=start_row, col=date_col_index, value=vw_value)
+                cells_to_update.append(cell_vw)
+            
+            # Update Toyota (row start_row + 1)
+            if update_toyota and toyota_data and day in toyota_data:
+                toyota_value = convert_to_native_type(toyota_data[day].get(advisor_name, 0))
+                cell_toyota = Cell(row=start_row + 1, col=date_col_index, value=toyota_value)
+                cells_to_update.append(cell_toyota)
+            
+            # Update Alfa (row start_row + 2)
+            if update_alfa and alfa_data and day in alfa_data:
+                alfa_value = convert_to_native_type(alfa_data[day].get(advisor_name, 0))
+                cell_alfa = Cell(row=start_row + 2, col=date_col_index, value=alfa_value)
+                cells_to_update.append(cell_alfa)
+    
+    if cells_to_update:
+        try:
+            sheet.update_cells(cells_to_update)
+            st.success(f"Updated {len(cells_to_update)} cells successfully for {len(all_days)} day(s)!")
+        except Exception as e:
+            st.error(f"Failed to update Appointments Google Sheet cells: {e}")
+
 #   SHEET UPDATE UTILITIES
 
 def update_google_sheet(sheet, data_series1, *args, date_col_index, start_row_offset, advisor_mapping):
@@ -616,8 +748,8 @@ def main():
         unsafe_allow_html=True
     )
 
-    # Create tabs for Advisor and RTH processes
-    tab1, tab2 = st.tabs(["Advisor", "RTH"])
+    # Create tabs for Advisor, RTH, and Appointments processes
+    tab1, tab2, tab3 = st.tabs(["Advisor", "RTH", "Appointments"])
     
     # ==================== ADVISOR TAB ====================
     with tab1:
@@ -1247,6 +1379,174 @@ def main():
                             st.success(f"Employee Timecard data updated successfully for {len(timecard_data)} technicians!")
                         except Exception as e:
                             st.error(f"Error updating Employee Timecard data: {e}")
+                        time.sleep(delay_seconds)
+    
+    # ==================== APPOINTMENTS TAB ====================
+    with tab3:
+        st.markdown("### Appointments Data Processing")
+        appt_sheet_name = st.text_input("Enter the Google Sheet name:", "SHEET NAME HERE", key="appt_sheet_name")
+        appt_worksheet_name = st.text_input("Enter the Worksheet (tab) name:", "Input", key="appt_worksheet_name")
+        
+        st.subheader("Upload Excel Files")
+        
+        # ---- Volkswagen Appointments
+        st.markdown("#### **Upload Volkswagen Appointments Excel**")
+        vw_appointments_file = st.file_uploader("Select Volkswagen Appointments Excel file", type=["xlsx"], key="appt_vw", label_visibility="hidden")
+        
+        # ---- Toyota Appointments
+        st.markdown("#### **Upload Toyota Appointments Excel**")
+        toyota_appointments_file = st.file_uploader("Select Toyota Appointments Excel file", type=["xlsx"], key="appt_toyota", label_visibility="hidden")
+        
+        # ---- Alfa Appointments
+        st.markdown("#### **Upload Alfa Appointments Excel**")
+        alfa_appointments_file = st.file_uploader("Select Alfa Appointments Excel file", type=["xlsx"], key="appt_alfa", label_visibility="hidden")
+        
+        # -------------- Connect to Appointments Google Sheet --------------
+        appt_sheet = connect_to_google_sheet(appt_sheet_name, appt_worksheet_name)
+        if appt_sheet is None:
+            st.error("Failed to connect to the Appointments Google Sheet. Please check the inputs and try again.")
+        
+        if appt_sheet is not None:
+            # -------------- Get Advisors from Google Sheet --------------
+            # Advisors are in column A, starting at row 4, every 4 rows
+            # Each advisor occupies 4 rows: Volkswagen, Toyota, Alfa, Daily Objective
+            col_a_values = appt_sheet.col_values(1)[3:]  # Advisor first names, start from row 4 (index 3)
+            
+            advisor_names = []
+            advisor_start_rows = []
+            row = 4
+            idx = 0
+            
+            while idx < len(col_a_values):
+                advisor_name = col_a_values[idx]
+                if not advisor_name or advisor_name.strip() == "":
+                    break
+                # Extract first name and normalize
+                advisor_first_name = advisor_name.strip().split()[0].upper()
+                advisor_names.append(advisor_first_name)
+                advisor_start_rows.append(row + idx)
+                idx += 4  # Each advisor occupies 4 rows
+            
+            appt_advisor_mapping = dict(zip(advisor_names, advisor_start_rows))
+            
+            st.write(f"Found {len(appt_advisor_mapping)} advisors in the Google Sheet.")
+            
+            # -------------- Update Buttons --------------
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                if vw_appointments_file is not None:
+                    if st.button("Update Volkswagen in Google Sheet", key="appt_update_vw"):
+                        try:
+                            df_vw = pd.read_excel(vw_appointments_file, header=1)  # Headers at row 2 (index 1)
+                            vw_data = process_appointments_data(df_vw, is_volkswagen=True)
+                            # Update only VW row
+                            update_appointments_in_sheet(
+                                appt_sheet,
+                                vw_data=vw_data,
+                                toyota_data={},
+                                alfa_data={},
+                                advisor_mapping=appt_advisor_mapping,
+                                update_vw=True,
+                                update_toyota=False,
+                                update_alfa=False
+                            )
+                            st.success("Volkswagen Appointments data updated successfully!")
+                        except Exception as e:
+                            st.error(f"Error updating Volkswagen Appointments data: {e}")
+                        time.sleep(delay_seconds)
+            
+            with col2:
+                if toyota_appointments_file is not None:
+                    if st.button("Update Toyota in Google Sheet", key="appt_update_toyota"):
+                        try:
+                            df_toyota = pd.read_excel(toyota_appointments_file, header=1)
+                            toyota_data = process_appointments_data(df_toyota, is_volkswagen=False)
+                            # Update only Toyota row
+                            update_appointments_in_sheet(
+                                appt_sheet,
+                                vw_data={},
+                                toyota_data=toyota_data,
+                                alfa_data={},
+                                advisor_mapping=appt_advisor_mapping,
+                                update_vw=False,
+                                update_toyota=True,
+                                update_alfa=False
+                            )
+                            st.success("Toyota Appointments data updated successfully!")
+                        except Exception as e:
+                            st.error(f"Error updating Toyota Appointments data: {e}")
+                        time.sleep(delay_seconds)
+            
+            with col3:
+                if alfa_appointments_file is not None:
+                    if st.button("Update Alfa in Google Sheet", key="appt_update_alfa"):
+                        try:
+                            df_alfa = pd.read_excel(alfa_appointments_file, header=1)
+                            alfa_data = process_appointments_data(df_alfa, is_volkswagen=False)
+                            # Update only Alfa row
+                            update_appointments_in_sheet(
+                                appt_sheet,
+                                vw_data={},
+                                toyota_data={},
+                                alfa_data=alfa_data,
+                                advisor_mapping=appt_advisor_mapping,
+                                update_vw=False,
+                                update_toyota=False,
+                                update_alfa=True
+                            )
+                            st.success("Alfa Appointments data updated successfully!")
+                        except Exception as e:
+                            st.error(f"Error updating Alfa Appointments data: {e}")
+                        time.sleep(delay_seconds)
+            
+            with col4:
+                # Update All button
+                if vw_appointments_file or toyota_appointments_file or alfa_appointments_file:
+                    if st.button("Update All Appointments", key="appt_update_all"):
+                        vw_data = {}
+                        toyota_data = {}
+                        alfa_data = {}
+                        
+                        # Process VW
+                        if vw_appointments_file:
+                            try:
+                                df_vw = pd.read_excel(vw_appointments_file, header=1)
+                                vw_data = process_appointments_data(df_vw, is_volkswagen=True)
+                                st.success("Volkswagen data processed successfully.")
+                            except Exception as e:
+                                st.error(f"Error processing Volkswagen data: {e}")
+                        
+                        # Process Toyota
+                        if toyota_appointments_file:
+                            try:
+                                df_toyota = pd.read_excel(toyota_appointments_file, header=1)
+                                toyota_data = process_appointments_data(df_toyota, is_volkswagen=False)
+                                st.success("Toyota data processed successfully.")
+                            except Exception as e:
+                                st.error(f"Error processing Toyota data: {e}")
+                        
+                        # Process Alfa
+                        if alfa_appointments_file:
+                            try:
+                                df_alfa = pd.read_excel(alfa_appointments_file, header=1)
+                                alfa_data = process_appointments_data(df_alfa, is_volkswagen=False)
+                                st.success("Alfa data processed successfully.")
+                            except Exception as e:
+                                st.error(f"Error processing Alfa data: {e}")
+                        
+                        # Update all at once
+                        try:
+                            update_appointments_in_sheet(
+                                appt_sheet,
+                                vw_data=vw_data,
+                                toyota_data=toyota_data,
+                                alfa_data=alfa_data,
+                                advisor_mapping=appt_advisor_mapping
+                            )
+                            st.success("All Appointments data updated successfully!")
+                        except Exception as e:
+                            st.error(f"Error updating Appointments data: {e}")
                         time.sleep(delay_seconds)
 
 
