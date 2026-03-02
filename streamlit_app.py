@@ -715,6 +715,62 @@ def update_commodities_in_sheet(sheet, date_col_index, commodities_data, commodi
         except Exception as e:
             st.error(f"Failed to update Commodities in Google Sheet: {e}")
 
+# ── MULTI-FILE INGESTION HELPERS ────────────────────────────────────────────
+
+_COLUMN_ALIASES = {
+    "Repair Order":        "RO Number",
+    "RO#":                 "RO Number",
+    "RO No":               "RO Number",
+    "Repair Order Number": "RO Number",
+    "Operation":           "Op Text",
+}
+
+def read_many_excels(uploaded_files):
+    """Read a list of uploaded Excel files into one concatenated DataFrame.
+    Adds a '__source_file' column to track origin. Errors per file are shown
+    as st.error but do not abort the rest."""
+    dfs = []
+    for f in uploaded_files:
+        try:
+            df = pd.read_excel(f)
+            df["__source_file"] = f.name
+            dfs.append(df)
+        except Exception as e:
+            st.error(f"Could not read '{f.name}': {e}")
+    if not dfs:
+        return pd.DataFrame()
+    return pd.concat(dfs, ignore_index=True)
+
+def normalize_columns(df):
+    """Rename common column-name variants to the canonical names expected
+    by the processing functions. Only renames columns that actually exist."""
+    return df.rename(columns={k: v for k, v in _COLUMN_ALIASES.items() if k in df.columns})
+
+def dedupe_rows(df):
+    """Drop duplicate rows using the best available key subset.
+    Priority: ['RO Number','Line'] > ['RO Number','Op Code','Open Date'] >
+    ['RO Number','Op Text'] > full-row dedup."""
+    _KEY_CANDIDATES = [
+        ["RO Number", "Line"],
+        ["RO Number", "Op Code", "Open Date"],
+        ["RO Number", "Op Text"],
+    ]
+    cols = set(df.columns)
+    for keys in _KEY_CANDIDATES:
+        if all(k in cols for k in keys):
+            before = len(df)
+            df = df.drop_duplicates(subset=keys)
+            removed = before - len(df)
+            if removed:
+                st.info(f"Deduplication removed {removed} duplicate row(s) using keys {keys}.")
+            return df
+    before = len(df)
+    df = df.drop_duplicates()
+    removed = before - len(df)
+    if removed:
+        st.info(f"Deduplication removed {removed} duplicate row(s) via full-row match.")
+    return df
+
 # MAIN
 def main():
     set_bg_color()
@@ -765,7 +821,9 @@ def main():
 
         # ---- Menu Sales
         st.markdown("#### **Upload Menu Sales Excel**")
-        menu_sales_file = st.file_uploader("Upload Menu Sales Excel", type=["xlsx"], key="advisor_menu_sales_file", label_visibility="hidden")
+        st.caption("You can select multiple files (e.g. old labor ops + new menus report).")
+        menu_sales_files = st.file_uploader("Upload Menu Sales Excel", type=["xlsx"], key="advisor_menu_sales_file", label_visibility="hidden", accept_multiple_files=True)
+        menu_sales_dedupe = st.checkbox("Deduplicate Menu Sales rows (recommended when combining files)", value=True, key="menu_sales_dedupe")
 
         # ---- A-La-Carte
         st.markdown("#### **Upload A-La-Carte Excel**")
@@ -792,8 +850,10 @@ def main():
 
         # -------------- Alignment --------------
         st.markdown("### **Upload Alignment Files**")
-        alignment_menus_file = st.file_uploader("Upload Alignment Menus Excel", type=["xlsx"], key="advisor_alignment_menus")
-        alignment_alacarte_file = st.file_uploader("Upload Alignment A-La-Carte Excel", type=["xlsx"], key="advisor_alignment_alacarte")
+        st.caption("You can select multiple files per section (e.g. old labor ops + new menus report).")
+        alignment_menus_files = st.file_uploader("Upload Alignment Menus Excel", type=["xlsx"], key="advisor_alignment_menus", accept_multiple_files=True)
+        alignment_alacarte_files = st.file_uploader("Upload Alignment A-La-Carte Excel", type=["xlsx"], key="advisor_alignment_alacarte", accept_multiple_files=True)
+        alignment_dedupe = st.checkbox("Deduplicate Alignment rows (recommended when combining files)", value=True, key="alignment_dedupe")
 
         # -------------- Date Selection --------------
         selected_date = st.date_input("Select the date:", datetime.now(), key="advisor_selected_date").strftime('%d').lstrip('0')
@@ -870,10 +930,15 @@ def main():
 
             # -------------- Menu Sales --------------
             with col2:
-                if menu_sales_file is not None:
+                if menu_sales_files:
+                    st.caption(f"Files: {', '.join(f.name for f in menu_sales_files)}")
                     if st.button("Update Menu Sales in Google Sheet", key="advisor_update_menu_sales"):
                         try:
-                            df_menu_sales = pd.read_excel(menu_sales_file)
+                            df_menu_sales = read_many_excels(menu_sales_files)
+                            df_menu_sales = normalize_columns(df_menu_sales)
+                            if menu_sales_dedupe:
+                                df_menu_sales = dedupe_rows(df_menu_sales)
+                            st.write(f"Combined rows: {len(df_menu_sales)}")
                             menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name", "RO Number")
                             update_google_sheet(
                             sheet,
@@ -912,7 +977,7 @@ def main():
 
             # -------------- Commodities (including Alignments) --------------
             with col4:
-                if any(commodities_files.values()) or alignment_menus_file or alignment_alacarte_file:
+                if any(commodities_files.values()) or alignment_menus_files or alignment_alacarte_files:
                     if st.button("Update Commodities in Google Sheet", key="advisor_update_commodities"):
                         commodities_data = {}
 
@@ -961,9 +1026,14 @@ def main():
                         alignment_counts_menus = {}
                         alignment_counts_alacarte = {}
 
-                        if alignment_menus_file:
+                        if alignment_menus_files:
                             try:
-                                df_menus_new = pd.read_excel(alignment_menus_file, header=0)
+                                st.caption(f"Alignment Menus files: {', '.join(f.name for f in alignment_menus_files)}")
+                                df_menus_new = read_many_excels(alignment_menus_files)
+                                df_menus_new = normalize_columns(df_menus_new)
+                                if alignment_dedupe:
+                                    df_menus_new = dedupe_rows(df_menus_new)
+                                st.write(f"Alignment Menus combined rows: {len(df_menus_new)}")
                                 alignment_counts_menus = process_alignment_new_format(
                                     df_menus_new,
                                     advisor_col="Advisor Name",
@@ -973,9 +1043,14 @@ def main():
                             except Exception as e:
                                 st.error(f"Error processing new-format Alignment Menus: {e}")
 
-                        if alignment_alacarte_file:
+                        if alignment_alacarte_files:
                             try:
-                                df_alacarte_align = pd.read_excel(alignment_alacarte_file, header=0)
+                                st.caption(f"Alignment A-La-Carte files: {', '.join(f.name for f in alignment_alacarte_files)}")
+                                df_alacarte_align = read_many_excels(alignment_alacarte_files)
+                                df_alacarte_align = normalize_columns(df_alacarte_align)
+                                if alignment_dedupe:
+                                    df_alacarte_align = dedupe_rows(df_alacarte_align)
+                                st.write(f"Alignment A-La-Carte combined rows: {len(df_alacarte_align)}")
                                 alignment_counts_alacarte = process_alignment_new_format(
                                     df_alacarte_align,
                                     advisor_col="Advisor Name",
@@ -1078,9 +1153,12 @@ def main():
                         time.sleep(delay_seconds)
 
                 # ---------- Menu Sales ----------
-                if menu_sales_file:
+                if menu_sales_files:
                         try:
-                            df_menu_sales = pd.read_excel(menu_sales_file)
+                            df_menu_sales = read_many_excels(menu_sales_files)
+                            df_menu_sales = normalize_columns(df_menu_sales)
+                            if menu_sales_dedupe:
+                                df_menu_sales = dedupe_rows(df_menu_sales)
                             menu_name_counts, menu_labor_gross_sums, menu_parts_gross_sums = process_menu_sales_data(df_menu_sales, "Advisor Name", "RO Number")
                             update_google_sheet(
                                 sheet,
@@ -1169,9 +1247,12 @@ def main():
                 alignment_counts_alacarte = {}
 
                 # Menus => new
-                if alignment_menus_file:
+                if alignment_menus_files:
                         try:
-                            df_menus_new = pd.read_excel(alignment_menus_file, header=0)
+                            df_menus_new = read_many_excels(alignment_menus_files)
+                            df_menus_new = normalize_columns(df_menus_new)
+                            if alignment_dedupe:
+                                df_menus_new = dedupe_rows(df_menus_new)
                             alignment_counts_menus = process_alignment_new_format(
                                 df_menus_new,
                                 advisor_col="Advisor Name",
@@ -1182,9 +1263,12 @@ def main():
                             st.error(f"Error processing new-format Alignment Menus: {e}")
 
                 # A-La-Carte => new
-                if alignment_alacarte_file:
+                if alignment_alacarte_files:
                         try:
-                            df_alacarte_align = pd.read_excel(alignment_alacarte_file, header=0)
+                            df_alacarte_align = read_many_excels(alignment_alacarte_files)
+                            df_alacarte_align = normalize_columns(df_alacarte_align)
+                            if alignment_dedupe:
+                                df_alacarte_align = dedupe_rows(df_alacarte_align)
                             alignment_counts_alacarte = process_alignment_new_format(
                                 df_alacarte_align,
                                 advisor_col="Advisor Name",
